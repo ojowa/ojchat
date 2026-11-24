@@ -1,5 +1,4 @@
 import React from 'react';
-import * as Sentry from '@sentry/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -14,14 +13,6 @@ import { SyncEngine } from '../sync/SyncEngine';
 import { useAppStore, bindQueryClient } from '../store';
 import { initMMKV } from '../services/storage/mmkvStorage';
 import { logger } from '../utils/logger';
-
-if (!__DEV__) {
-  Sentry.init({
-    dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
-    tracesSampleRate: 0.2,
-    environment: __DEV__ ? 'development' : 'production',
-  });
-}
 
 initMMKV();
 
@@ -39,7 +30,6 @@ const queryClient = new QueryClient({
         logger.error('Mutation error', {
           message: error instanceof Error ? error.message : String(error),
         });
-        Sentry.captureException(error);
       },
     },
   },
@@ -73,7 +63,7 @@ const AppInner: React.FC = () => {
   );
 };
 
-export default Sentry.wrap(function App() {
+export default function App() {
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -87,4 +77,4 @@ export default Sentry.wrap(function App() {
       </GestureHandlerRootView>
     </ErrorBoundary>
   );
-});
+}
