@@ -27,6 +27,7 @@ import { MomentCronService } from './modules/matching/crons/moment-cron.service'
 // chat
 import { ChatController } from './modules/chat/chat.controller';
 import { ChatService } from './modules/chat/chat.service';
+import { ChatGateway } from './modules/chat/chat.gateway';
 
 // calls
 import { CallsController } from './modules/calls/calls.controller';
@@ -102,7 +103,7 @@ export class MatchingFeatureModule {}
 
 @Module({
   controllers: [ChatController],
-  providers: [ChatService],
+  providers: [ChatService, ChatGateway],
 })
 export class ChatFeatureModule {}
 
