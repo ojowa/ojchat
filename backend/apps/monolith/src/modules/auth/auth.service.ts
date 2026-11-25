@@ -411,7 +411,7 @@ export class AuthService {
       secret,
       label: user.email,
       issuer: 'OJChat',
-      algorithm: 'SHA1',
+      algorithm: 'sha1',
     });
     const qrCodeUrl = await QRCode.toDataURL(otpauth);
 
@@ -434,7 +434,7 @@ export class AuthService {
     const result = speakeasy.totp.verify({
       secret: user.twoFactorSecret,
       token: code,
-      algorithm: 'SHA1',
+      algorithm: 'sha1',
     });
     if (!result) throw new BadRequestException('Invalid verification code. Try again.');
 
@@ -470,7 +470,7 @@ export class AuthService {
     const result = speakeasy.totp.verify({
       secret: user.twoFactorSecret,
       token: code,
-      algorithm: 'SHA1',
+      algorithm: 'sha1',
     });
     if (!result) throw new BadRequestException('Invalid verification code');
 
@@ -498,7 +498,7 @@ export class AuthService {
     const result = speakeasy.totp.verify({
       secret: user.twoFactorSecret,
       token: code,
-      algorithm: 'SHA1',
+      algorithm: 'sha1',
     });
     if (!result) throw new BadRequestException('Invalid verification code');
 
