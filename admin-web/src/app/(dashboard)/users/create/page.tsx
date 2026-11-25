@@ -122,7 +122,6 @@ export default function CreateAdminPage() {
             <div className="space-y-2">
               <Label htmlFor="role">Role</Label>
               <Select
-                id="role"
                 value={role}
                 onValueChange={(v) => setRole(v)}
               >
