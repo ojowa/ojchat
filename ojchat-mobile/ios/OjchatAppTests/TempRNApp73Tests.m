@@ -7,11 +7,11 @@
 #define TIMEOUT_SECONDS 600
 #define TEXT_TO_LOOK_FOR @"Welcome to React"
 
-@interface TempRNApp73Tests : XCTestCase
+@interface OjchatAppTests : XCTestCase
 
 @end
 
-@implementation TempRNApp73Tests
+@implementation OjchatAppTests
 
 - (BOOL)findSubviewInView:(UIView *)view matching:(BOOL (^)(UIView *view))test
 {

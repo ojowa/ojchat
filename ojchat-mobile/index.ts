@@ -6,4 +6,4 @@ import { AppRegistry } from 'react-native';
 
 import App from './src/app/App';
 
-AppRegistry.registerComponent('TempRNApp73', () => App);
+AppRegistry.registerComponent('OjchatApp', () => App);

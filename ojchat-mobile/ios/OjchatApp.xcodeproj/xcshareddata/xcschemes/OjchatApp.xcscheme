@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-               BuildableName = "TempRNApp73.app"
-               BlueprintName = "TempRNApp73"
-               ReferencedContainer = "container:TempRNApp73.xcodeproj">
+               BuildableName = "OjchatApp.app"
+               BlueprintName = "OjchatApp"
+               ReferencedContainer = "container:OjchatApp.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -33,9 +33,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "00E356ED1AD99517003FC87E"
-               BuildableName = "TempRNApp73Tests.xctest"
-               BlueprintName = "TempRNApp73Tests"
-               ReferencedContainer = "container:TempRNApp73.xcodeproj">
+               BuildableName = "OjchatAppTests.xctest"
+               BlueprintName = "OjchatAppTests"
+               ReferencedContainer = "container:OjchatApp.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -55,9 +55,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "TempRNApp73.app"
-            BlueprintName = "TempRNApp73"
-            ReferencedContainer = "container:TempRNApp73.xcodeproj">
+            BuildableName = "OjchatApp.app"
+            BlueprintName = "OjchatApp"
+            ReferencedContainer = "container:OjchatApp.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -72,9 +72,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "TempRNApp73.app"
-            BlueprintName = "TempRNApp73"
-            ReferencedContainer = "container:TempRNApp73.xcodeproj">
+            BuildableName = "OjchatApp.app"
+            BlueprintName = "OjchatApp"
+            ReferencedContainer = "container:OjchatApp.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

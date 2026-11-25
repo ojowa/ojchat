@@ -78,9 +78,9 @@ android {
         buildConfig = true
     }
 
-    namespace "com.ojchatmobile"
+    namespace "com.ojchat.app"
     defaultConfig {
-        applicationId "com.ojchatmobile"
+        applicationId "com.ojchat.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
