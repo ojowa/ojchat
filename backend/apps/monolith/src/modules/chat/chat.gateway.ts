@@ -81,9 +81,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const room = this.conversationRooms.get(data.conversationId);
     if (room) {
       for (const socketId of room) {
-        const socket = this.server.sockets.get(socketId);
-        if (socket) {
-          socket.emit('message.received', {
+        if (socketId !== client.id) {
+          this.server.to(socketId).emit('message.received', {
             conversationId: data.conversationId,
             messageId: data.messageId,
             senderId: data.senderId,
@@ -122,9 +121,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const room = this.conversationRooms.get(data.conversationId);
     if (room) {
       for (const socketId of room) {
-        const socket = this.server.sockets.get(socketId);
-        if (socket && socketId !== client.id) {
-          socket.emit('user.typing', {
+        if (socketId !== client.id) {
+          this.server.to(socketId).emit('user.typing', {
             conversationId: data.conversationId,
             userId: data.userId,
           });
@@ -144,9 +142,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const room = this.conversationRooms.get(data.conversationId);
     if (room) {
       for (const socketId of room) {
-        const socket = this.server.sockets.get(socketId);
-        if (socket && socketId !== client.id) {
-          socket.emit('user.typing.stop', {
+        if (socketId !== client.id) {
+          this.server.to(socketId).emit('user.typing.stop', {
             conversationId: data.conversationId,
             userId: data.userId,
           });
@@ -166,15 +163,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const room = this.conversationRooms.get(data.conversationId);
     if (room) {
       for (const socketId of room) {
-        const socket = this.server.sockets.get(socketId);
-        if (socket) {
-          socket.emit('message.read', {
-            conversationId: data.conversationId,
-            messageId: data.messageId,
-            userId: data.userId,
-            readAt: new Date().toISOString(),
-          });
-        }
+        this.server.to(socketId).emit('message.read', {
+          conversationId: data.conversationId,
+          messageId: data.messageId,
+          userId: data.userId,
+          readAt: new Date().toISOString(),
+        });
       }
     }
   }
@@ -198,13 +192,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Notify others in conversation that user is online
     for (const socketId of sockets) {
       if (socketId !== client.id) {
-        const socket = this.server.sockets.get(socketId);
-        if (socket) {
-          socket.emit('user.online', {
-            conversationId: data.conversationId,
-            userId,
-          });
-        }
+        this.server.to(socketId).emit('user.online', {
+          conversationId: data.conversationId,
+          userId,
+        });
       }
     }
 
@@ -240,10 +231,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const sockets = this.conversationRooms.get(conversationId);
     if (sockets) {
       for (const socketId of sockets) {
-        const socket = this.server.sockets.get(socketId);
-        if (socket) {
-          socket.emit(event, data);
-        }
+        this.server.to(socketId).emit(event, data);
       }
     }
   }
