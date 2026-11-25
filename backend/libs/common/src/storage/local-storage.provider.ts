@@ -10,8 +10,13 @@ export class LocalStorageProvider implements StorageProvider {
   constructor(config: { uploadDir?: string; baseUrl?: string }) {
     this.uploadDir = config.uploadDir || path.join(process.cwd(), 'uploads');
     this.baseUrl = config.baseUrl || 'http://localhost:3006/media/files';
-    if (!fs.existsSync(this.uploadDir)) {
-      fs.mkdirSync(this.uploadDir, { recursive: true });
+    try {
+      if (!fs.existsSync(this.uploadDir)) {
+        fs.mkdirSync(this.uploadDir, { recursive: true });
+      }
+    } catch {
+      // On serverless environments (e.g., Vercel), the filesystem may be
+      // read-only. Uploads will fail gracefully at request time if needed.
     }
   }
 
