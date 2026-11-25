@@ -7,11 +7,14 @@ import {
   DeviceToken,
   NotificationDelivery,
 } from '@app/common/entities';
-import { Expo, ExpoPushMessage } from 'expo-server-sdk';
+
+// expo-server-sdk is ESM-only and incompatible with Vercel's CJS serverless.
+// The mobile app now uses @notifee/react-native (not Expo push), so push
+// sending is a no-op stub here. Device tokens are still stored for future use.
+const Expo = null as any;
 
 @Injectable()
 export class NotificationsService {
-  private readonly expo = new Expo();
   private readonly logger = new Logger(NotificationsService.name);
 
   constructor(
@@ -191,34 +194,13 @@ export class NotificationsService {
     const tokens = await this.tokenRepo.find({ where: { userId, active: true } });
     if (tokens.length === 0) return;
 
-    const messages: ExpoPushMessage[] = tokens
-      .filter((t) => Expo.isExpoPushToken(t.token))
-      .map((t) => ({
-        to: t.token,
-        title: payload.title,
-        body: payload.body,
-        data: payload.data || {},
-        sound: 'default',
-        priority: 'high',
-      }));
-
-    if (messages.length === 0) return;
-
-    const chunks = this.expo.chunkPushNotifications(messages);
-    for (const chunk of chunks) {
-      try {
-        const receipts = await this.expo.sendPushNotificationsAsync(chunk);
-        for (let i = 0; i < receipts.length; i++) {
-          const receipt = receipts[i];
-          const token = tokens[i];
-          if (receipt.status === 'error' && receipt.message?.includes('DeviceNotRegistered')) {
-            await this.tokenRepo.update(token.id, { active: false });
-          }
-        }
-      } catch (error) {
-        this.logger.error(`Push send error: ${error}`);
-      }
-    }
+    // Push notifications are disabled on the backend: the mobile app uses
+    // @notifee/react-native directly (not Expo push), so there is no Expo
+    // push server to send to. Device tokens are retained for future use.
+    this.logger.log(
+      `Push send skipped for user ${userId}: ${tokens.length} active device token(s), ` +
+        'Expo push disabled (mobile uses notifee)',
+    );
   }
 
   async cleanupOldNotifications() {
