@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { Audio, AVPlaybackStatus } from 'expo-av';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import AudioRecorderPlayer, { PlayBackType } from 'react-native-audio-recorder-player';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing } from '../../theme/spacing';
@@ -15,11 +15,11 @@ interface VoiceMessageProps {
 const WAVEFORM_BARS = 28;
 
 export const VoiceMessage: React.FC<VoiceMessageProps> = ({ url, duration, isOwn }) => {
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [position, setPosition] = useState(0);
   const [totalDuration, setTotalDuration] = useState((duration || 0) * 1000);
-  const [isLoaded, setIsLoaded] = useState(false);
+  const player = useRef(new AudioRecorderPlayer()).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const waveformAnims = useRef(
     Array.from({ length: WAVEFORM_BARS }, () => new Animated.Value(0.3)),
@@ -27,9 +27,10 @@ export const VoiceMessage: React.FC<VoiceMessageProps> = ({ url, duration, isOwn
 
   useEffect(() => {
     return () => {
-      sound?.unloadAsync();
+      player.removePlayBackListener();
+      player.stopPlayer().catch(() => {});
     };
-  }, [sound]);
+  }, []);
 
   useEffect(() => {
     if (isPlaying) {
@@ -56,41 +57,40 @@ export const VoiceMessage: React.FC<VoiceMessageProps> = ({ url, duration, isOwn
     }
   }, [isPlaying]);
 
+  const onPlaybackStatusUpdate = (status: PlayBackType) => {
+    setPosition(status.currentPosition);
+    if (status.duration > 0) setTotalDuration(status.duration);
+    if (status.isFinished) {
+      setIsPlaying(false);
+      setIsPaused(false);
+      setPosition(0);
+      player.removePlayBackListener();
+    }
+  };
+
   const loadAndPlay = async () => {
     try {
-      if (sound) {
-        if (isPlaying) {
-          await sound.pauseAsync();
-          setIsPlaying(false);
+      if (isPlaying) {
+        if (isPaused) {
+          await player.resumePlayer();
+          setIsPaused(false);
         } else {
-          await sound.playAsync();
-          setIsPlaying(true);
+          await player.pausePlayer();
+          setIsPaused(true);
         }
         return;
       }
 
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: url },
-        { shouldPlay: true },
-        onPlaybackStatusUpdate,
-      );
-      setSound(newSound);
+      await player.stopPlayer().catch(() => {});
+      player.addPlayBackListener(onPlaybackStatusUpdate);
+      await player.startPlayer(url);
       setIsPlaying(true);
+      setIsPaused(false);
     } catch (err) {
       console.error('Failed to play voice message', err);
-    }
-  };
-
-  const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    if (!status.isLoaded) return;
-    setIsLoaded(true);
-    setPosition(status.positionMillis);
-    setTotalDuration(status.durationMillis || 0);
-    if (status.didJustFinish) {
+      player.removePlayBackListener();
       setIsPlaying(false);
-      setPosition(0);
-      sound?.setPositionAsync(0);
+      setIsPaused(false);
     }
   };
 
@@ -108,7 +108,7 @@ export const VoiceMessage: React.FC<VoiceMessageProps> = ({ url, duration, isOwn
       <TouchableOpacity style={styles.playButton} onPress={loadAndPlay} activeOpacity={0.7}>
         <Animated.View style={[styles.playIconContainer, { transform: [{ scale: pulseAnim }] }]}>
           <Ionicons
-            name={isPlaying ? 'pause' : 'play'}
+            name={isPlaying && !isPaused ? 'pause' : 'play'}
             size={18}
             color={isOwn ? colors.white : colors.primary}
           />

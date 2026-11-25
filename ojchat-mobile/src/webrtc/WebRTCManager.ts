@@ -1,5 +1,5 @@
 import { RTCPeerConnection, mediaDevices, MediaStream } from './bindings';
-import * as Crypto from 'expo-crypto';
+import * as Crypto from '../services/crypto/aesCrypto';
 import { SOCKET_EVENTS } from '../constants/socketEvents';
 import SocketManager from '../socket/SocketManager';
 import { WEBRTC_CONFIG, CALL_QUALITY, CALL_QUALITY_CHECK_INTERVAL_MS } from '../constants/webrtc';
@@ -376,7 +376,13 @@ class WebRTCManager {
 
   private async generateCallId(): Promise<string> {
     const array = new Uint8Array(16);
-    Crypto.getRandomValues(array);
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+      crypto.getRandomValues(array);
+    } else {
+      for (let i = 0; i < array.length; i += 1) {
+        array[i] = Math.floor(Math.random() * 256);
+      }
+    }
     const randomHex = Array.from(array)
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('');

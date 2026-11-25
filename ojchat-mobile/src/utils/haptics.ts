@@ -1,25 +1,35 @@
-import * as Haptics from 'expo-haptics';
+import { Platform, Vibration } from 'react-native';
+
+// Haptic feedback via native Vibration API (replaces expo-haptics).
+const isAndroid = Platform.OS === 'android';
+
+function vibrate(pattern: number | number[]) {
+  Vibration.vibrate(pattern);
+}
 
 export function impactLight() {
-  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  vibrate(10);
 }
 
 export function impactMedium() {
-  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  vibrate(25);
 }
 
 export function impactHeavy() {
-  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+  vibrate(40);
 }
 
 export function notificationSuccess() {
-  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  vibrate([0, 20, 40, 20]);
 }
 
 export function notificationWarning() {
-  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+  vibrate([0, 30, 60, 30]);
 }
 
 export function notificationError() {
-  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+  vibrate([0, 50, 80, 50]);
 }
+
+// Kept for parity with the previous API surface.
+export const supportsHaptics = isAndroid || Platform.OS === 'ios';

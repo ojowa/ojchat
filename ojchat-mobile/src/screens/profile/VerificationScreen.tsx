@@ -8,12 +8,14 @@ import {
   Alert,
   Animated,
   ScrollView,
+  PermissionsAndroid,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import LinearGradient from 'react-native-linear-gradient';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import ImageResizer from 'react-native-image-resizer';
 import { apiClient } from '../../services/api/apiClient';
 import { ENDPOINTS } from '../../constants/endpoints';
 import { colors } from '../../theme/colors';
@@ -65,66 +67,56 @@ export const VerificationScreen: React.FC<{ navigation: any }> = ({ navigation }
     }
   };
 
-  const takeSelfie = async () => {
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.9,
-    });
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
+  const applySelfie = async (uri: string) => {
+    try {
+      const manipulated = await ImageResizer.createResizedImage(
+        uri,
+        800,
+        8000,
+        'JPEG',
+        85,
+        0,
+        undefined,
+        false,
+        { mode: 'contain', onlyScaleDown: true },
+      );
 
-      try {
-        const manipulated = await ImageManipulator.manipulateAsync(
-          asset.uri,
-          [{ resize: { width: 800 } }],
-          { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG },
-        );
-
-        setSelfie(manipulated.uri);
-        setImageQuality({
-          width: manipulated.width,
-          height: manipulated.height,
-        });
-        setFaceDetected(true);
-        startPulse();
-      } catch {
-        setSelfie(asset.uri);
-        setFaceDetected(true);
-      }
+      setSelfie(manipulated.uri);
+      setImageQuality({
+        width: manipulated.width,
+        height: manipulated.height,
+      });
+      setFaceDetected(true);
+      startPulse();
+    } catch {
+      setSelfie(uri);
+      setFaceDetected(true);
     }
   };
 
-  const pickFromGallery = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.9,
-    });
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-
-      try {
-        const manipulated = await ImageManipulator.manipulateAsync(
-          asset.uri,
-          [{ resize: { width: 800 } }],
-          { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG },
-        );
-
-        setSelfie(manipulated.uri);
-        setImageQuality({
-          width: manipulated.width,
-          height: manipulated.height,
-        });
-        setFaceDetected(true);
-        startPulse();
-      } catch {
-        setSelfie(asset.uri);
-        setFaceDetected(true);
+  const takeSelfie = async () => {
+    if (Platform.OS === 'android') {
+      const permission = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
+      if (permission !== PermissionsAndroid.RESULTS.GRANTED) {
+        Alert.alert('Permission needed', 'Camera access is required to take a verification selfie.');
+        return;
       }
     }
+    const result = await launchCamera({
+      mediaType: 'photo',
+      quality: 0.9,
+    });
+    const uri = result.didCancel ? undefined : result.assets?.[0]?.uri;
+    if (uri) await applySelfie(uri);
+  };
+
+  const pickFromGallery = async () => {
+    const result = await launchImageLibrary({
+      mediaType: 'photo',
+      quality: 0.9,
+    });
+    const uri = result.didCancel ? undefined : result.assets?.[0]?.uri;
+    if (uri) await applySelfie(uri);
   };
 
   const submitVerification = async () => {
@@ -284,13 +276,13 @@ export const VerificationScreen: React.FC<{ navigation: any }> = ({ navigation }
         <View style={styles.stepsContainer}>
           <View style={[styles.stepDot, styles.stepDotActive]} />
           <View style={styles.stepLine} />
-          <View style={[styles.stepDot, selfie && styles.stepDotActive]} />
+          <View style={[styles.stepDot, !!selfie && styles.stepDotActive]} />
           <View style={styles.stepLine} />
           <View style={[styles.stepDot, loading && styles.stepDotActive]} />
         </View>
         <View style={styles.stepLabels}>
           <Text style={[styles.stepLabel, styles.stepLabelActive]}>Photo</Text>
-          <Text style={[styles.stepLabel, selfie && styles.stepLabelActive]}>Review</Text>
+          <Text style={[styles.stepLabel, !!selfie && styles.stepLabelActive]}>Review</Text>
           <Text style={[styles.stepLabel, loading && styles.stepLabelActive]}>Submit</Text>
         </View>
 

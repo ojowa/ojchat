@@ -1,4 +1,4 @@
-import * as Crypto from 'expo-crypto';
+import * as Crypto from './aesCrypto';
 import { KeyManager } from './KeyManager';
 import { MediaEncryptor } from './MediaEncryptor';
 import { secureStorage } from '../storage/secureStorage';

@@ -1,5 +1,5 @@
-import * as Crypto from 'expo-crypto';
-import { AESEncryptionKey, AESSealedData, aesEncryptAsync, aesDecryptAsync } from 'expo-crypto';
+import * as Crypto from './aesCrypto';
+import { AESEncryptionKey, AESSealedData, aesEncryptAsync, aesDecryptAsync } from './aesCrypto';
 import { RatchetState } from '../../types/crypto';
 import { KeyManager } from './KeyManager';
 import { bytesToHex, hexToBytes, stringToBytes, hkdfSha256 } from './primitives';

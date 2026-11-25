@@ -114,7 +114,7 @@ works on shared / CloudLinux (CageFS) cPanel hosting.
    https://yourdomain.com/docs
 
 6. Point clients at https://yourdomain.com/v1
-   - mobile : EXPO_PUBLIC_API_URL=https://yourdomain.com/v1
+   - mobile : PUBLIC_API_URL=https://yourdomain.com/v1
    - admin  : NEXT_PUBLIC_API_URL=https://yourdomain.com/v1
 
 WHY THIS AVOIDS ERROR 127

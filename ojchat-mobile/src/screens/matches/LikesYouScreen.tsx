@@ -11,7 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { matchApi } from '../../services/api/matchApi';
 import { usePlanInfo } from '../../hooks/useMatch';
@@ -471,7 +471,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardOverlay: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'transparent',
   },
   superBadge: {

@@ -51,7 +51,7 @@ export const Input: React.FC<InputProps> = ({
           style={[
             styles.input,
             focused && styles.focused,
-            error && styles.errorBorder,
+            !!error && styles.errorBorder,
             multiline && styles.multiline,
             disabled && styles.inputDisabled,
             (showClear || secureTextEntry) && styles.inputWithAction,

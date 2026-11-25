@@ -1,5 +1,5 @@
-import * as Crypto from 'expo-crypto';
-import { AESEncryptionKey, AESSealedData, aesEncryptAsync, aesDecryptAsync } from 'expo-crypto';
+import * as Crypto from './aesCrypto';
+import { AESEncryptionKey, AESSealedData, aesEncryptAsync, aesDecryptAsync } from './aesCrypto';
 import { generateKeyPair, scalarMultBase, sharedKey } from '@stablelib/x25519';
 import { getDatabase } from '../../database/connection';
 import { secureStorage } from '../storage/secureStorage';

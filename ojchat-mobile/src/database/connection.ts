@@ -1,21 +1,100 @@
 import { Platform } from 'react-native';
-import * as SQLite from 'expo-sqlite';
+import { open, type DB } from '@op-engineering/op-sqlite';
 
-let db: SQLite.SQLiteDatabase | null = null;
+/** Values that can be bound to a SQL parameter (matches op-sqlite's Scalar). */
+type SQLiteScalar = string | number | boolean | null | ArrayBuffer | ArrayBufferView;
 
-export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
+/**
+ * expo-sqlite compatible surface. The app's repositories were written against
+ * expo-sqlite's async API; this adapter maps it onto @op-engineering/op-sqlite
+ * so no repository code has to change.
+ */
+export interface SQLiteDatabase {
+  execAsync(sql: string): Promise<void>;
+  runAsync(sql: string, params?: unknown[]): Promise<{ lastInsertRowId: number; changes: number }>;
+  getAllAsync<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>;
+  getFirstAsync<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T | null>;
+}
+
+/**
+ * Splits a SQL string into individual statements. op-sqlite only executes the
+ * first prepared statement of a string, and migrations ship as multi-statement
+ * blocks, so we split them here (respecting quoted strings).
+ */
+function splitStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let current = '';
+  let inSingle = false;
+  let inDouble = false;
+  let inBacktick = false;
+  for (const ch of sql) {
+    if (ch === "'" && !inDouble && !inBacktick) inSingle = !inSingle;
+    else if (ch === '"' && !inSingle && !inBacktick) inDouble = !inDouble;
+    else if (ch === '`' && !inSingle && !inDouble) inBacktick = !inBacktick;
+
+    if (ch === ';' && !inSingle && !inDouble && !inBacktick) {
+      statements.push(current);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  statements.push(current);
+  return statements.map((s) => s.trim()).filter((s) => s.length > 0);
+}
+
+function normalizeParams(params: unknown[] = []): SQLiteScalar[] {
+  return params.map((p) => {
+    if (p === undefined || p === null) return null;
+    if (typeof p === 'boolean') return p ? 1 : 0;
+    return p as SQLiteScalar;
+  });
+}
+
+class OpSQLiteAdapter implements SQLiteDatabase {
+  constructor(private readonly handle: DB) {}
+
+  async execAsync(sql: string): Promise<void> {
+    for (const statement of splitStatements(sql)) {
+      await this.handle.execute(statement);
+    }
+  }
+
+  async runAsync(sql: string, params: unknown[] = []) {
+    const result = await this.handle.execute(sql, normalizeParams(params));
+    return { lastInsertRowId: result.insertId ?? 0, changes: result.rowsAffected };
+  }
+
+  async getAllAsync<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
+    const result = await this.handle.execute(sql, normalizeParams(params));
+    return result.rows as T[];
+  }
+
+  async getFirstAsync<T = Record<string, unknown>>(
+    sql: string,
+    params: unknown[] = [],
+  ): Promise<T | null> {
+    const result = await this.handle.execute(sql, normalizeParams(params));
+    return (result.rows.length > 0 ? result.rows[0] : null) as T | null;
+  }
+}
+
+let db: SQLiteDatabase | null = null;
+
+export async function getDatabase(): Promise<SQLiteDatabase> {
   if (Platform.OS === 'web') {
     throw new Error('SQLite is not supported on web. Use API instead.');
   }
   if (db) return db;
-  db = await SQLite.openDatabaseAsync('ojchat.db');
+  const handle = open({ name: 'ojchat.db' });
+  db = new OpSQLiteAdapter(handle);
   await db.execAsync('PRAGMA journal_mode=WAL;');
   await db.execAsync('PRAGMA foreign_keys=ON;');
   await runMigrations(db);
   return db;
 }
 
-async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
+async function runMigrations(db: SQLiteDatabase): Promise<void> {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS _migrations (
       version INTEGER PRIMARY KEY,
@@ -51,7 +130,7 @@ async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
   }
 }
 
-async function migration001(db: SQLite.SQLiteDatabase) {
+async function migration001(db: SQLiteDatabase) {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY NOT NULL,
@@ -100,7 +179,7 @@ async function migration001(db: SQLite.SQLiteDatabase) {
   `);
 }
 
-async function migration002(db: SQLite.SQLiteDatabase) {
+async function migration002(db: SQLiteDatabase) {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS conversations (
       id TEXT PRIMARY KEY NOT NULL,
@@ -135,7 +214,7 @@ async function migration002(db: SQLite.SQLiteDatabase) {
   `);
 }
 
-async function migration003(db: SQLite.SQLiteDatabase) {
+async function migration003(db: SQLiteDatabase) {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS media (
       id TEXT PRIMARY KEY NOT NULL,
@@ -156,7 +235,7 @@ async function migration003(db: SQLite.SQLiteDatabase) {
   `);
 }
 
-async function migration004(db: SQLite.SQLiteDatabase) {
+async function migration004(db: SQLiteDatabase) {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS sync_queue (
       id TEXT PRIMARY KEY NOT NULL,
@@ -179,7 +258,7 @@ async function migration004(db: SQLite.SQLiteDatabase) {
   `);
 }
 
-async function migration005(db: SQLite.SQLiteDatabase) {
+async function migration005(db: SQLiteDatabase) {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS local_conversations (
       id TEXT PRIMARY KEY,

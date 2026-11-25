@@ -1,8 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, TextInput, TouchableOpacity, Text, StyleSheet, Alert, Animated } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-av';
+import {
+  View,
+  TextInput,
+  TouchableOpacity,
+  Text,
+  StyleSheet,
+  Alert,
+  Animated,
+  PermissionsAndroid,
+  Platform,
+} from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import AudioRecorderPlayer from 'react-native-audio-recorder-player';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing } from '../../theme/spacing';
@@ -30,25 +40,28 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 }) => {
   const [text, setText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const recordingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioRecorderPlayer = useRef(new AudioRecorderPlayer()).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     return () => {
       if (recordingTimer.current) clearInterval(recordingTimer.current);
+      audioRecorderPlayer.removeRecordBackListener();
     };
   }, []);
 
   const startRecording = async () => {
     try {
-      await Audio.requestPermissionsAsync();
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const { recording: newRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY,
-      );
-      setRecording(newRecording);
+      if (Platform.OS === 'android') {
+        const result = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+        );
+        if (result !== PermissionsAndroid.RESULTS.GRANTED) return;
+      }
+      // On iOS the recorder prompts for microphone access itself.
+      await audioRecorderPlayer.startRecorder();
       setIsRecording(true);
       setRecordingDuration(0);
 
@@ -64,37 +77,37 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       ).start();
     } catch (err) {
       console.error('Failed to start recording', err);
+      setIsRecording(false);
     }
   };
 
-  const stopRecording = async () => {
-    if (!recording) return;
+  const finishRecording = async (): Promise<string | null> => {
     setIsRecording(false);
     if (recordingTimer.current) {
       clearInterval(recordingTimer.current);
       recordingTimer.current = null;
     }
     pulseAnim.setValue(1);
-    await recording.stopAndUnloadAsync();
-    await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-    const uri = recording.getURI();
+    audioRecorderPlayer.removeRecordBackListener();
+    try {
+      return await audioRecorderPlayer.stopRecorder();
+    } catch (err) {
+      console.error('Failed to stop recording', err);
+      return null;
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!isRecording) return;
     const duration = recordingDuration;
-    setRecording(null);
+    const uri = await finishRecording();
     setRecordingDuration(0);
     if (uri && onSendVoice) onSendVoice(uri, duration);
   };
 
   const cancelRecording = async () => {
-    if (!recording) return;
-    setIsRecording(false);
-    if (recordingTimer.current) {
-      clearInterval(recordingTimer.current);
-      recordingTimer.current = null;
-    }
-    pulseAnim.setValue(1);
-    await recording.stopAndUnloadAsync();
-    await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-    setRecording(null);
+    if (!isRecording) return;
+    await finishRecording();
     setRecordingDuration(0);
   };
 
@@ -116,25 +129,23 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       {
         text: '📷 Camera',
         onPress: async () => {
-          const { status } = await ImagePicker.requestCameraPermissionsAsync();
-          if (status !== 'granted') return;
-          const result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ['images'],
-            quality: 0.8,
-          });
-          if (!result.canceled && result.assets[0]) onSendImage?.(result.assets[0].uri);
+          if (Platform.OS === 'android') {
+            const result = await PermissionsAndroid.request(
+              PermissionsAndroid.PERMISSIONS.CAMERA,
+            );
+            if (result !== PermissionsAndroid.RESULTS.GRANTED) return;
+          }
+          const response = await launchCamera({ mediaType: 'photo', quality: 0.8 });
+          const uri = response.didCancel ? undefined : response.assets?.[0]?.uri;
+          if (uri) onSendImage?.(uri);
         },
       },
       {
         text: '🖼️ Gallery',
         onPress: async () => {
-          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-          if (status !== 'granted') return;
-          const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
-            quality: 0.8,
-          });
-          if (!result.canceled && result.assets[0]) onSendImage?.(result.assets[0].uri);
+          const response = await launchImageLibrary({ mediaType: 'photo', quality: 0.8 });
+          const uri = response.didCancel ? undefined : response.assets?.[0]?.uri;
+          if (uri) onSendImage?.(uri);
         },
       },
       {

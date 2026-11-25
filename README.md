@@ -8,7 +8,7 @@ Monorepo for the **OJChat / Connecta** dating platform.
 |---|---|
 | [`backend/`](backend/) | Standalone NestJS backend — 13 services behind an API gateway, TypeORM/PostgreSQL, Redis, Socket.IO. **Start here:** [`backend/README.md`](backend/README.md) |
 | [`admin-web/`](admin-web/) | Next.js admin dashboard (own `package.json`; deploys to Azure Static Web Apps) |
-| [`ojchat-mobile/`](ojchat-mobile/) | Expo / React Native mobile app (own `package.json`) |
+| [`ojchat-mobile/`](ojchat-mobile/) | Bare React Native mobile app (own `package.json`, native `android/` + `ios/` projects) |
 | [`docs/`](docs/) | Numbered product & technical specs (01 executive summary … 23 code audit) |
 
 Each app owns its own dependencies and tooling — install and run them
@@ -22,7 +22,7 @@ cd backend && npm ci && npm run dev
 cd admin-web && npm ci && npm run dev   # Next.js on :3013
 
 # mobile
-cd ojchat-mobile && npm ci && npx expo start
+cd ojchat-mobile && npm ci && npx react-native start
 ```
 
 ## CI/CD
@@ -30,7 +30,9 @@ cd ojchat-mobile && npm ci && npx expo start
 - **Backend** → Azure Web App `ojchatapi` via
   `.github/workflows/main_ojchatapi.yml` (triggers on `backend/**` changes)
 - **Admin web** → Azure Static Web Apps (configured in the Azure portal / SWA CLI)
-- **Mobile** → EAS builds (`ojchat-mobile/eas.json`)
+- **Mobile** → GitHub Actions:
+  - `.github/workflows/android.yml` — Android build (`ojchat-mobile/**`)
+  - `.github/workflows/ios.yml` — iOS build (`ojchat-mobile/**`)
 
 See [`backend/README.md`](backend/README.md) for env vars, scripts, and
 architecture details.

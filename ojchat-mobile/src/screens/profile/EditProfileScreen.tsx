@@ -10,8 +10,8 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import LinearGradient from 'react-native-linear-gradient';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { profileApi } from '../../services/api/profileApi';

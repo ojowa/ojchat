@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import LinearGradient from 'react-native-linear-gradient';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/useAuth';
 import { apiClient } from '../../services/api/apiClient';
@@ -85,7 +85,7 @@ export const ProfileScreen: React.FC<MainTabScreenProps<'Profile'>> = ({ navigat
             <View
               style={[
                 styles.menuIconContainer,
-                item.color && { backgroundColor: item.color + '15' },
+                item.color ? { backgroundColor: item.color + '15' } : undefined,
               ]}
             >
               <Ionicons name={item.icon} size={20} color={item.color || colors.primary} />

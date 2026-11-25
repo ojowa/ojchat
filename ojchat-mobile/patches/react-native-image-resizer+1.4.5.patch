@@ -1,0 +1,12 @@
+diff --git a/node_modules/react-native-image-resizer/android/build.gradle b/node_modules/react-native-image-resizer/android/build.gradle
+index e8a1054..ceea5cc 100644
+--- a/node_modules/react-native-image-resizer/android/build.gradle
++++ b/node_modules/react-native-image-resizer/android/build.gradle
+@@ -5,6 +5,7 @@ def safeExtGet(prop, fallback) {
+ }
+ 
+ android {
++    namespace "fr.bamlab.rnimageresizer"
+     compileSdkVersion safeExtGet('compileSdkVersion', 26)
+     buildToolsVersion safeExtGet('buildToolsVersion', "26.0.3")
+     

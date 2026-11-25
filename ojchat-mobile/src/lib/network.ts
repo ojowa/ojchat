@@ -1,7 +1,7 @@
-const LOCAL_API = process.env.EXPO_PUBLIC_LOCAL_API_URL || '';
-const LOCAL_WS = process.env.EXPO_PUBLIC_LOCAL_WS_URL || '';
-const PUBLIC_API = process.env.EXPO_PUBLIC_API_URL || '';
-const PUBLIC_WS = process.env.EXPO_PUBLIC_WS_URL || '';
+const LOCAL_API = process.env.PUBLIC_LOCAL_API_URL || '';
+const LOCAL_WS = process.env.PUBLIC_LOCAL_WS_URL || '';
+const PUBLIC_API = process.env.PUBLIC_API_URL || '';
+const PUBLIC_WS = process.env.PUBLIC_WS_URL || '';
 
 let cachedApiUrl: string | null = null;
 let cachedWsUrl: string | null = null;
@@ -43,7 +43,7 @@ export async function resolveApiUrl(): Promise<string> {
   }
   if (!cachedApiUrl) {
     throw new Error(
-      `No valid API URL configured. Set EXPO_PUBLIC_API_URL or EXPO_PUBLIC_LOCAL_API_URL.` +
+      `No valid API URL configured. Set PUBLIC_API_URL or PUBLIC_LOCAL_API_URL.` +
         `\nLOCAL_API=${LOCAL_API || '(empty)'}` +
         `\nPUBLIC_API=${PUBLIC_API || '(empty)'}`,
     );
@@ -64,7 +64,7 @@ export async function resolveWsUrl(): Promise<string> {
   }
   if (!cachedWsUrl) {
     throw new Error(
-      `No valid WS URL configured. Set EXPO_PUBLIC_WS_URL or EXPO_PUBLIC_LOCAL_WS_URL.` +
+      `No valid WS URL configured. Set PUBLIC_WS_URL or PUBLIC_LOCAL_WS_URL.` +
         `\nLOCAL_WS=${LOCAL_WS || '(empty)'}` +
         `\nPUBLIC_WS=${PUBLIC_WS || '(empty)'}`,
     );

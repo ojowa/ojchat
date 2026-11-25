@@ -1,48 +1,72 @@
-import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
-import { File } from 'expo-file-system';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import ImageResizer from 'react-native-image-resizer';
+import { PermissionsAndroid, Platform } from 'react-native';
 import { apiClient } from '../services/api/apiClient';
 import { ENDPOINTS } from '../constants/endpoints';
 import { ProcessedImage } from '../types/media';
 
+const MAX_DIMENSION = 1080;
+const JPEG_QUALITY = 82; // matches the previous 0.82 compress factor
+const PICKER_QUALITY = 0.9;
+
+async function ensureCameraPermission(): Promise<boolean> {
+  if (Platform.OS !== 'android') return true; // iOS prompts via NSCameraUsageDescription
+  const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
+  return result === PermissionsAndroid.RESULTS.GRANTED;
+}
+
+/**
+ * Image picking + processing with react-native-image-picker and
+ * react-native-image-resizer (replaces expo-image-picker / expo-image-manipulator).
+ *
+ * Note: react-native-image-picker has no built-in crop UI (the old
+ * `allowsEditing`/`aspect` options), so selection returns the full image and
+ * processing only resizes/compresses.
+ */
 export class ImageProcessor {
   static async pickImage(): Promise<ProcessedImage | null> {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return null;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [3, 4],
-      quality: 0.9,
+    const result = await launchImageLibrary({
+      mediaType: 'photo',
+      quality: PICKER_QUALITY,
     });
-    if (result.canceled) return null;
-    return this.processImage(result.assets[0].uri);
+    if (result.didCancel || result.errorCode === 'permission') return null;
+    const uri = result.assets?.[0]?.uri;
+    if (!uri) return null;
+    return this.processImage(uri);
   }
 
   static async takePhoto(): Promise<ProcessedImage | null> {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) return null;
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [3, 4],
-      quality: 0.9,
+    if (!(await ensureCameraPermission())) return null;
+    const result = await launchCamera({
+      mediaType: 'photo',
+      quality: PICKER_QUALITY,
+      cameraType: 'back',
     });
-    if (result.canceled) return null;
-    return this.processImage(result.assets[0].uri);
+    if (result.didCancel || result.errorCode === 'permission') return null;
+    const uri = result.assets?.[0]?.uri;
+    if (!uri) return null;
+    return this.processImage(uri);
   }
 
   static async processImage(uri: string): Promise<ProcessedImage> {
-    const resized = await ImageManipulator.manipulateAsync(uri, [{ resize: { width: 1080 } }], {
-      compress: 0.82,
-      format: ImageManipulator.SaveFormat.JPEG,
-    });
-    const file = new File(resized.uri);
-    const fileSize = file.exists ? file.size : 0;
+    const resized = await ImageResizer.createResizedImage(
+      uri,
+      MAX_DIMENSION,
+      // Large bound so the width limit governs, matching the old
+      // `resize: { width: 1080 }` behaviour that preserved the aspect ratio.
+      MAX_DIMENSION * 10,
+      'JPEG',
+      JPEG_QUALITY,
+      0,
+      undefined,
+      false,
+      { mode: 'contain', onlyScaleDown: true },
+    );
     return {
       uri: resized.uri,
       width: resized.width,
       height: resized.height,
-      size: fileSize ?? 0,
+      size: resized.size ?? 0,
       mimeType: 'image/jpeg',
     };
   }

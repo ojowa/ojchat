@@ -1,28 +1,40 @@
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
-import Constants from 'expo-constants';
+import notifee, {
+  AndroidImportance,
+  AuthorizationStatus,
+  EventType,
+  type Event,
+} from '@notifee/react-native';
 import { Platform } from 'react-native';
 import { apiClient } from '../services/api/apiClient';
 import { ENDPOINTS } from '../constants/endpoints';
 import { useAppStore } from '../store';
+import { secureStorage } from '../services/storage/secureStorage';
+import { randomUUID } from '../services/crypto/aesCrypto';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
-
+type NotificationData = Record<string, string | object | number>;
 type NotificationNavigationCallback = (screen: string, params?: Record<string, any>) => void;
 
+const DEVICE_ID_KEY = 'notifications.deviceId';
+
+let backgroundListenerRegistered = false;
+
+/**
+ * Local + remote notifications for the bare React Native app.
+ *
+ * Replaces expo-notifications / expo-device / expo-constants with
+ * @notifee/react-native.
+ *
+ * NOTE: remote push still needs an FCM (Android) / APNs (iOS) provider wired
+ * up on the native side plus a server-side sender. Until that exists,
+ * `registerForPushNotificationsAsync` returns null and only local
+ * notifications are delivered.
+ */
 export class NotificationManager {
   private static instance: NotificationManager;
-  private expoPushToken: string | null = null;
-  private notificationSubscription: Notifications.EventSubscription | null = null;
-  private responseSubscription: Notifications.EventSubscription | null = null;
+  private pushToken: string | null = null;
+  private unsubscribeForeground: (() => void) | null = null;
   private navigationCallback: NotificationNavigationCallback | null = null;
+  private deviceId: string | null = null;
 
   static getInstance(): NotificationManager {
     if (!NotificationManager.instance) NotificationManager.instance = new NotificationManager();
@@ -35,33 +47,65 @@ export class NotificationManager {
 
   async initialize(): Promise<void> {
     try {
-      if (!Device.isDevice) return;
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      if (finalStatus !== 'granted') return;
-      this.expoPushToken = await this.registerForPushNotificationsAsync();
-      if (this.expoPushToken) await this.registerTokenWithBackend(this.expoPushToken);
+      const settings = await notifee.requestPermission();
+      const authorized =
+        settings.authorizationStatus === AuthorizationStatus.AUTHORIZED ||
+        settings.authorizationStatus === AuthorizationStatus.PROVISIONAL;
+      if (!authorized) return;
+
       if (Platform.OS === 'android') await this.setupAndroidChannels();
-      this.notificationSubscription = Notifications.addNotificationReceivedListener(
-        this.handleNotificationReceived,
-      );
-      this.responseSubscription = Notifications.addNotificationResponseReceivedListener(
-        this.handleNotificationResponse,
-      );
+
+      this.registerBackgroundListener();
+      this.registerForegroundListener();
+
+      // Cold start: the app was launched by tapping a notification.
+      const initial = await notifee.getInitialNotification();
+      if (initial?.notification?.data) {
+        this.handleNotificationResponse(initial.notification.data);
+      }
+
+      this.pushToken = await this.registerForPushNotificationsAsync();
+      if (this.pushToken) await this.registerTokenWithBackend(this.pushToken);
     } catch (error: any) {
       // Silent failure — push notifications are non-critical
     }
   }
 
-  private async registerForPushNotificationsAsync(): Promise<string | null> {
-    const { data } = await Notifications.getExpoPushTokenAsync({
-      projectId: Constants.expoConfig?.extra?.eas?.projectId,
+  private registerForegroundListener(): void {
+    this.unsubscribeForeground?.();
+    this.unsubscribeForeground = notifee.onForegroundEvent((event: Event) => {
+      const data = event.detail.notification?.data;
+      if (!data) return;
+      if (event.type === EventType.PRESS || event.type === EventType.ACTION_PRESS) {
+        this.handleNotificationResponse(data);
+      } else if (event.type === EventType.DELIVERED) {
+        this.handleNotificationReceived(data);
+      }
     });
-    return data;
+  }
+
+  private registerBackgroundListener(): void {
+    if (backgroundListenerRegistered) return;
+    backgroundListenerRegistered = true;
+    notifee.onBackgroundEvent(async (event: Event) => {
+      const data = event.detail.notification?.data;
+      if (!data) return;
+      if (event.type === EventType.PRESS || event.type === EventType.ACTION_PRESS) {
+        this.handleNotificationResponse(data);
+      } else if (event.type === EventType.DELIVERED) {
+        this.handleNotificationReceived(data);
+      }
+    });
+  }
+
+  /**
+   * TODO: wire up FCM (Android) / APNs (iOS).
+   * A bare React Native app has no equivalent of `getExpoPushTokenAsync()` —
+   * the token comes from @react-native-firebase/messaging (or a native FCM
+   * integration), so this returns null until that is configured.
+   */
+  private async registerForPushNotificationsAsync(): Promise<string | null> {
+    return null;
   }
 
   private async registerTokenWithBackend(token: string): Promise<void> {
@@ -69,40 +113,61 @@ export class NotificationManager {
       await apiClient.post(ENDPOINTS.NOTIFICATIONS.REGISTER, {
         token,
         platform: Platform.OS,
-        deviceId: Constants.installationId,
+        deviceId: await this.getDeviceId(),
       });
     } catch {
       // Token registration failure is non-critical
     }
   }
 
-  private async setupAndroidChannels(): Promise<void> {
-    await Notifications.setNotificationChannelAsync('messages', {
-      name: 'Messages',
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#FF6B6B',
-    });
-    await Notifications.setNotificationChannelAsync('calls', {
-      name: 'Calls',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 1000],
-    });
-    await Notifications.setNotificationChannelAsync('matches', {
-      name: 'Matches',
-      importance: Notifications.AndroidImportance.DEFAULT,
-    });
+  private async getDeviceId(): Promise<string> {
+    if (this.deviceId) return this.deviceId;
+    try {
+      const existing = await secureStorage.get(DEVICE_ID_KEY);
+      if (existing) {
+        this.deviceId = existing;
+        return existing;
+      }
+      const created = randomUUID();
+      await secureStorage.set(DEVICE_ID_KEY, created);
+      this.deviceId = created;
+      return created;
+    } catch {
+      this.deviceId = randomUUID();
+      return this.deviceId;
+    }
   }
 
-  private handleNotificationReceived = (notification: Notifications.Notification): void => {
-    const data = notification.request.content.data;
-    if (data?.type === 'message' && data.conversationId) {
-      useAppStore.getState().incrementUnread(data.conversationId as string);
+  private async setupAndroidChannels(): Promise<void> {
+    await notifee.createChannels([
+      {
+        id: 'messages',
+        name: 'Messages',
+        importance: AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF6B6B',
+      },
+      {
+        id: 'calls',
+        name: 'Calls',
+        importance: AndroidImportance.HIGH,
+        vibrationPattern: [0, 1000],
+      },
+      {
+        id: 'matches',
+        name: 'Matches',
+        importance: AndroidImportance.DEFAULT,
+      },
+    ]);
+  }
+
+  private handleNotificationReceived = (data: NotificationData): void => {
+    if (data.type === 'message' && data.conversationId) {
+      useAppStore.getState().incrementUnread(String(data.conversationId));
     }
   };
 
-  private handleNotificationResponse = (response: Notifications.NotificationResponse): void => {
-    const data = response.notification.request.content.data;
+  private handleNotificationResponse = (data: NotificationData): void => {
     if (!this.navigationCallback || !data) return;
 
     switch (data.type) {
@@ -129,11 +194,11 @@ export class NotificationManager {
   };
 
   async setBadgeCount(count: number): Promise<void> {
-    await Notifications.setBadgeCountAsync(count);
+    await notifee.setBadgeCount(count);
   }
 
   destroy(): void {
-    this.notificationSubscription?.remove();
-    this.responseSubscription?.remove();
+    this.unsubscribeForeground?.();
+    this.unsubscribeForeground = null;
   }
 }

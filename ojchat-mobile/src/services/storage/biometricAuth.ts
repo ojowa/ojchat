@@ -1,41 +1,71 @@
-import * as LocalAuthentication from 'expo-local-authentication';
 import * as Keychain from 'react-native-keychain';
+
 import { STORAGE_KEYS } from '../../constants/storageKeys';
+
+/**
+ * Biometric authentication backed by react-native-keychain
+ * (replaces expo-local-authentication).
+ *
+ * Keychain has no standalone "prompt" API, so `authenticate()` probes a
+ * dedicated throwaway secret that is protected by biometry: reading it back
+ * triggers the native fingerprint/face prompt.
+ */
+
+const PROBE_SERVICE = `${STORAGE_KEYS.BIOMETRIC_AUTH}.probe`;
 
 export class BiometricAuthService {
   static async isAvailable(): Promise<boolean> {
-    const compatible = await LocalAuthentication.hasHardwareAsync();
-    const enrolled = await LocalAuthentication.isEnrolledAsync();
-    return compatible && enrolled;
+    try {
+      const type = await Keychain.getSupportedBiometryType();
+      return type !== null;
+    } catch {
+      return false;
+    }
   }
 
   static async getBiometricType(): Promise<'fingerprint' | 'face' | 'iris' | null> {
-    const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
-    if (types.length === 0) return null;
-    const typeMap: Record<number, 'fingerprint' | 'face' | 'iris'> = {
-      1: 'fingerprint',
-      2: 'face',
-      3: 'iris',
-    };
-    return typeMap[types[0]] ?? null;
+    try {
+      const type = await Keychain.getSupportedBiometryType();
+      if (!type) return null;
+      if (type === 'Fingerprint') return 'fingerprint';
+      if (type === 'FaceID' || type === 'Face') return 'face';
+      if (type === 'Iris') return 'iris';
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   static async authenticate(
     reason: string,
   ): Promise<{ success: boolean; error?: string; biometricType: string | null }> {
     const biometricType = await this.getBiometricType();
-    if (!biometricType)
+    if (!biometricType) {
       return { success: false, error: 'Biometric not available', biometricType: null };
+    }
     try {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: reason,
-        cancelLabel: 'Cancel',
-        disableDeviceFallback: false,
-        fallbackLabel: 'Use Passcode',
+      const existing = await Keychain.getGenericPassword({ service: PROBE_SERVICE });
+      if (!existing) {
+        await Keychain.setGenericPassword('probe', 'probe', {
+          service: PROBE_SERVICE,
+          accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+          accessControl: Keychain.ACCESS_CONTROL.BIOMETRY_CURRENT_SET_OR_DEVICE_PASSCODE,
+        });
+      }
+      const result = await Keychain.getGenericPassword({
+        service: PROBE_SERVICE,
+        authenticationPrompt: {
+          title: reason,
+          subtitle: 'Verify your identity',
+          cancel: 'Cancel',
+        },
       });
-      return { success: result.success, biometricType };
+      if (!result) {
+        return { success: false, error: 'Biometric prompt failed', biometricType };
+      }
+      return { success: true, biometricType };
     } catch (error: any) {
-      return { success: false, error: error.message, biometricType };
+      return { success: false, error: error?.message, biometricType };
     }
   }
 
@@ -70,7 +100,11 @@ export class BiometricAuthService {
 
   static async deleteCredentials(): Promise<boolean> {
     try {
-      return await Keychain.resetGenericPassword({ service: STORAGE_KEYS.BIOMETRIC_AUTH });
+      const probeDeleted = await Keychain.resetGenericPassword({ service: PROBE_SERVICE });
+      const deleted = await Keychain.resetGenericPassword({
+        service: STORAGE_KEYS.BIOMETRIC_AUTH,
+      });
+      return deleted || probeDeleted;
     } catch {
       return false;
     }

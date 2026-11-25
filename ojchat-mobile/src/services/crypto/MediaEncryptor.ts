@@ -1,6 +1,5 @@
-import * as Crypto from 'expo-crypto';
-import { AESEncryptionKey, AESSealedData, aesEncryptAsync, aesDecryptAsync } from 'expo-crypto';
-import { File } from 'expo-file-system';
+import * as Crypto from './aesCrypto';
+import { AESEncryptionKey, AESSealedData, aesEncryptAsync, aesDecryptAsync } from './aesCrypto';
 import { EncryptedFile } from '../../types/crypto';
 import { fileSystem } from '../storage/fileSystem';
 import { bytesToHex, hexToBytes, concatBytes } from './primitives';
@@ -18,8 +17,7 @@ export class MediaEncryptor {
       throw new Error('File not found');
     }
 
-    const sourceFile = new File(fileUri);
-    const plaintextBytes = await sourceFile.bytes();
+    const plaintextBytes = await fileSystem.readBytes(fileUri);
 
     const key = await AESEncryptionKey.import(fileKey, 'hex');
     const sealed = await aesEncryptAsync(plaintextBytes, key, {
@@ -32,8 +30,7 @@ export class MediaEncryptor {
 
     const cacheDir = await fileSystem.ensureCacheDir();
     const encryptedUri = `${cacheDir}encrypted_${Date.now()}.enc`;
-    const encFile = new File(encryptedUri);
-    encFile.write(combined);
+    await fileSystem.writeBytes(encryptedUri, combined);
 
     return {
       uri: encryptedUri,
@@ -56,8 +53,7 @@ export class MediaEncryptor {
       throw new Error('Encrypted file not found');
     }
 
-    const encFile = new File(encryptedUri);
-    const allBytes = await encFile.bytes();
+    const allBytes = await fileSystem.readBytes(encryptedUri);
     if (allBytes.length < GCM_TAG_LENGTH) {
       throw new Error('Encrypted file is too short');
     }
@@ -76,8 +72,7 @@ export class MediaEncryptor {
 
     const cacheDir = await fileSystem.ensureCacheDir();
     const decryptedUri = `${cacheDir}decrypted_${Date.now()}`;
-    const decFile = new File(decryptedUri);
-    decFile.write(new Uint8Array(decrypted));
+    await fileSystem.writeBytes(decryptedUri, new Uint8Array(decrypted));
 
     return decryptedUri;
   }

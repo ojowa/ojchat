@@ -1,16 +1,24 @@
-import { createMMKV, MMKV } from 'react-native-mmkv';
+import { MMKV } from 'react-native-mmkv';
 import { Platform } from 'react-native';
-import * as Crypto from 'expo-crypto';
+import * as Crypto from '../crypto/aesCrypto';
 import { secureStorage, SecureStorageError } from './secureStorage';
 import { logger } from '../../utils/logger';
 import { STORAGE_KEYS } from '../../constants/storageKeys';
 
 const MMKV_KEY_NAME = STORAGE_KEYS.MMKV_ENCRYPTION_KEY;
 
+// react-native-mmkv v2 rejects encryption keys longer than 16 bytes, so we
+// derive a 128-bit key from the 256-bit secret persisted in the keystore.
+const MMKV_KEY_HEX_LENGTH = 32; // 32 hex chars = 16 bytes
+
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
+}
+
+function toMMKVEncryptionKey(hexKey: string): string {
+  return hexKey.slice(0, MMKV_KEY_HEX_LENGTH);
 }
 
 let storage: MMKV | null = null;
@@ -38,7 +46,7 @@ async function getOrCreateEncryptionKey(): Promise<string> {
 
 function migrateOldMMKV(newStorage: MMKV): void {
   try {
-    const oldMMKV = createMMKV();
+    const oldMMKV = new MMKV();
     const oldKeys = oldMMKV.getAllKeys();
     if (oldKeys.length === 0) return;
 
@@ -60,13 +68,12 @@ export function initMMKV(): Promise<void> {
 
   initPromise = (async () => {
     if (Platform.OS === 'web') {
-      storage = createMMKV({ id: STORAGE_KEYS.MMKV_ID });
+      storage = new MMKV({ id: STORAGE_KEYS.MMKV_ID });
     } else {
       const key = await getOrCreateEncryptionKey();
-      storage = createMMKV({
+      storage = new MMKV({
         id: STORAGE_KEYS.MMKV_ID,
-        encryptionKey: key,
-        encryptionType: 'AES-256',
+        encryptionKey: toMMKVEncryptionKey(key),
       });
     }
     migrateOldMMKV(storage);
@@ -90,7 +97,7 @@ export const mmkvStorage = {
     ensureStorage().set(key, value);
   },
   remove: (key: string): void => {
-    ensureStorage().remove(key);
+    ensureStorage().delete(key);
   },
   contains: (key: string): boolean => {
     return ensureStorage().contains(key);

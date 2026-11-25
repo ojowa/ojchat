@@ -13,6 +13,7 @@ import {
   Modal,
   TextInput,
   Platform,
+  PermissionsAndroid,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -26,7 +27,7 @@ import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { ErrorState } from '../../components/common/ErrorState';
 import { Avatar } from '../../components/common/Avatar';
 import { useAppStore } from '../../store';
-import * as ImagePicker from 'expo-image-picker';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Moment, MomentWithUser, MyMoment } from '../../types/moments';
 import { formatRelativeTime } from '../../utils/dateUtils';
 
@@ -191,20 +192,19 @@ const CreateMomentModal: React.FC<{
   const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
 
   const pickMedia = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
+    const result = await launchImageLibrary({
+      mediaType: 'mixed',
+      quality: 0.8,
+    });
+    if (result.didCancel) return;
+    if (result.errorCode === 'permission') {
       Alert.alert('Permission needed', 'Please grant camera roll access to add moments.');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images', 'videos'],
-      quality: 0.8,
-      allowsEditing: true,
-      videoMaxDuration: 60,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setMediaUri(result.assets[0].uri);
-      setMediaType(result.assets[0].type === 'video' ? 'video' : 'image');
+    const asset = result.assets?.[0];
+    if (asset?.uri) {
+      setMediaUri(asset.uri);
+      setMediaType(asset.type === 'video' ? 'video' : 'image');
     }
   };
 
@@ -225,20 +225,29 @@ const CreateMomentModal: React.FC<{
       input.click();
       return;
     }
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
+    if (Platform.OS === 'android') {
+      const permission = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
+      if (permission !== PermissionsAndroid.RESULTS.GRANTED) {
+        Alert.alert('Permission needed', 'Please grant camera access in your device settings.');
+        return;
+      }
+    }
+    const result = await launchCamera({
+      quality: 0.8,
+      // react-native-image-picker does not support 'mixed' for the Android camera.
+      mediaType: Platform.OS === 'ios' ? 'mixed' : 'photo',
+      durationLimit: 60,
+      cameraType: 'back',
+    });
+    if (result.didCancel) return;
+    if (result.errorCode === 'permission') {
       Alert.alert('Permission needed', 'Please grant camera access in your device settings.');
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({
-      quality: 0.8,
-      allowsEditing: true,
-      mediaTypes: ['images', 'videos'],
-      videoMaxDuration: 60,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setMediaUri(result.assets[0].uri);
-      setMediaType(result.assets[0].type === 'video' ? 'video' : 'image');
+    const asset = result.assets?.[0];
+    if (asset?.uri) {
+      setMediaUri(asset.uri);
+      setMediaType(asset.type === 'video' ? 'video' : 'image');
     }
   };
 

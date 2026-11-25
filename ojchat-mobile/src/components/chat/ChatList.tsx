@@ -33,6 +33,7 @@ export const ChatList: React.FC<ChatListProps> = ({
       data={conversations}
       renderItem={renderItem}
       keyExtractor={(item) => item.id}
+      estimatedItemSize={88}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.5}
       showsVerticalScrollIndicator={false}
