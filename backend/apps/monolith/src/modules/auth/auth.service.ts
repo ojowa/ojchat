@@ -10,7 +10,7 @@ import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as bcrypt from 'bcryptjs';
-import otplib from 'otplib';
+import * as speakeasy from 'speakeasy';
 import * as QRCode from 'qrcode';
 import {
   User,
@@ -406,8 +406,13 @@ export class AuthService {
       throw new BadRequestException('Authenticator app is already enabled. Disable it first.');
     }
 
-    const secret = otplib.generateSecret();
-    const otpauth = otplib.generateURI({ label: user.email, issuer: 'OJChat', secret });
+    const secret = speakeasy.generateSecret({ length: 20 }).base32;
+    const otpauth = speakeasy.otpauthURL({
+      secret,
+      label: user.email,
+      issuer: 'OJChat',
+      algorithm: 'SHA1',
+    });
     const qrCodeUrl = await QRCode.toDataURL(otpauth);
 
     await this.userRepo.update(userId, {
@@ -426,8 +431,12 @@ export class AuthService {
     if (!user.twoFactorSecret)
       throw new BadRequestException('No 2FA setup in progress. Call /auth/2fa/setup first.');
 
-    const result = otplib.verifySync({ token: code, secret: user.twoFactorSecret });
-    if (!result.valid) throw new BadRequestException('Invalid verification code. Try again.');
+    const result = speakeasy.totp.verify({
+      secret: user.twoFactorSecret,
+      token: code,
+      algorithm: 'SHA1',
+    });
+    if (!result) throw new BadRequestException('Invalid verification code. Try again.');
 
     await this.userRepo.update(userId, {
       twoFactorEnabled: true,
@@ -458,8 +467,12 @@ export class AuthService {
     if (!user.twoFactorEnabled || !user.twoFactorSecret)
       throw new BadRequestException('2FA is not enabled');
 
-    const result = otplib.verifySync({ token: code, secret: user.twoFactorSecret });
-    if (!result.valid) throw new BadRequestException('Invalid verification code');
+    const result = speakeasy.totp.verify({
+      secret: user.twoFactorSecret,
+      token: code,
+      algorithm: 'SHA1',
+    });
+    if (!result) throw new BadRequestException('Invalid verification code');
 
     await this.userRepo.update(user.id, {
       loginAttempts: 0,
@@ -482,8 +495,12 @@ export class AuthService {
     if (!user.twoFactorEnabled) throw new BadRequestException('2FA is not enabled');
     if (!user.twoFactorSecret) throw new BadRequestException('No 2FA secret found');
 
-    const result = otplib.verifySync({ token: code, secret: user.twoFactorSecret });
-    if (!result.valid) throw new BadRequestException('Invalid verification code');
+    const result = speakeasy.totp.verify({
+      secret: user.twoFactorSecret,
+      token: code,
+      algorithm: 'SHA1',
+    });
+    if (!result) throw new BadRequestException('Invalid verification code');
 
     await this.userRepo.update(userId, {
       twoFactorEnabled: false,
