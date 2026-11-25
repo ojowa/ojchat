@@ -156,6 +156,24 @@ export class AdminService {
     return { user: rest };
   }
 
+  async createAdmin(data: { email: string; password: string; name: string; role: string }) {
+    const existing = await this.adminRepo.findOne({ where: { email: data.email } });
+    if (existing) throw new ConflictException('Admin with this email already exists');
+
+    const passwordHash = await bcrypt.hash(data.password, 12);
+    const admin = this.adminRepo.create({
+      email: data.email,
+      passwordHash,
+      name: data.name || data.email,
+      role: data.role as any,
+      isActive: true,
+      tfaEnabled: false,
+    });
+    const saved = await this.adminRepo.save(admin);
+    const { passwordHash: _, ...rest } = saved;
+    return { admin: rest };
+  }
+
   async getReports(page = 1, limit = 20) {
     const [reports, total] = await this.reportRepo.findAndCount({
       order: { createdAt: 'DESC' },

@@ -100,6 +100,18 @@ export class AdminController {
     return this.adminService.getUser(id);
   }
 
+  @Post('users')
+  @ApiOperation({ summary: 'Create admin user' })
+  createAdmin(@Headers('authorization') auth: string, @Body() body: any) {
+    this.verifyAuth(auth);
+    return this.adminService.createAdmin({
+      email: body.email,
+      password: body.password,
+      name: body.name,
+      role: body.role || 'moderator',
+    });
+  }
+
   @Get('reports')
   @ApiOperation({ summary: 'Get all reports' })
   getReports(
