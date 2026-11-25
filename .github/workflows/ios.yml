@@ -11,17 +11,17 @@ on:
 jobs:
   build:
     name: Build iOS App
-    runs-on: macos-14
+    runs-on: macos-15
     defaults:
       run:
         working-directory: ./ojchat-mobile
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -52,12 +52,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-release-build
-          path: ojchat-mobile/ios/build/Build/Products/Release-iphoneos/TempRNApp73.app
+          path: ojchat-mobile/ios/build/Build/Products/Release-iphoneos/ojchat-mobile.app
           if-no-files-found: error
 
   archive-and-deploy:
     name: Archive & Deploy to TestFlight
-    runs-on: macos-14
+    runs-on: macos-15
     needs: build
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     defaults:
@@ -66,10 +66,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -85,16 +85,29 @@ jobs:
           NO_FLIPPER: '1'
 
       - name: Import Code Signing Certificate
-        uses: apple-actions/import-codesign-certs@v2
+        uses: apple-actions/import-codesign-certs@v7
         with:
           p12-file-base64: ${{ secrets.IOS_CERTIFICATE_P12 }}
           p12-password: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
 
-      - name: Import Provisioning Profile
-        uses: apple-actions/import-provisioning-profile@v1
+      - name: Download Provisioning Profile
+        id: profiles
+        uses: apple-actions/download-provisioning-profiles@v7
         with:
-          profile-data-base64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
-          mobileprovision-filename: AppStore.mobileprovision
+          bundle-id: 'com.ojchatmobile'
+          profile-type: 'IOS_APP_STORE'
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          api-key-id: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          api-private-key: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+
+      - name: Verify provisioning profile was found
+        env:
+          PROFILES: ${{ steps.profiles.outputs.profiles }}
+        run: |
+          if ! echo "$PROFILES" | grep -q 'com.ojchatmobile'; then
+            echo "::error::No ACTIVE App Store provisioning profile for com.ojchatmobile"
+            exit 1
+          fi
 
       - name: Build Archive
         run: |
@@ -146,11 +159,16 @@ jobs:
           if-no-files-found: error
 
       - name: Upload to TestFlight
+        env:
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
         run: |
+          printf '%s' "$API_KEY_CONTENT" > "$RUNNER_TEMP/AuthKey.p8"
           xcrun altool --upload-app \
             -f build/ipa/*.ipa \
             -t ios \
-            --apiKey ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }} \
-            --apiIssuer ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }} \
-            --apiKeyPath ${{ secrets.APP_STORE_CONNECT_API_KEY_P8_PATH }}
+            --apiKey "$API_KEY_ID" \
+            --apiIssuer "$API_ISSUER_ID" \
+            --apiKeyPath "$RUNNER_TEMP/AuthKey.p8"
         working-directory: ./ojchat-mobile/ios

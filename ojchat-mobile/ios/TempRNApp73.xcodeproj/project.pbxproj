@@ -431,7 +431,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.ojchatmobile";
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TempRNApp73.app/TempRNApp73";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ojchat-mobile.app/ojchat-mobile";
 			};
 			name = Debug;
 		};
@@ -455,7 +455,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.ojchatmobile";
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TempRNApp73.app/TempRNApp73";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ojchat-mobile.app/ojchat-mobile";
 			};
 			name = Release;
 		};
@@ -479,7 +479,8 @@
 					"-lc++",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.ojchatmobile";
-				PRODUCT_NAME = ojchat-mobile;\n\t\t\t\tRCT_NEW_ARCH_ENABLED = NO;
+				PRODUCT_NAME = ojchat-mobile;
+				RCT_NEW_ARCH_ENABLED = NO;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
@@ -505,7 +506,8 @@
 					"-lc++",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.ojchatmobile";
-				PRODUCT_NAME = ojchat-mobile;\n\t\t\t\tRCT_NEW_ARCH_ENABLED = NO;
+				PRODUCT_NAME = ojchat-mobile;
+				RCT_NEW_ARCH_ENABLED = NO;
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
