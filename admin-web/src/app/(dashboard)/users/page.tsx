@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
-import { Search, MoreHorizontal, Eye, Ban, CheckCircle, UserPlus } from "lucide-react";
+import { Search, MoreHorizontal, Eye, Ban, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -89,15 +88,6 @@ export default function UsersPage() {
           </SelectContent>
         </Select>
         <Button onClick={handleSearch}>Search</Button>
-        <Button
-          asChild
-          className="ml-2"
-        >
-          <Link href="/users/create">
-            <UserPlus className="h-4 w-4 mr-2" />
-            Create Admin
-          </Link>
-        </Button>
       </div>
 
       <ErrorBanner error={error} />
