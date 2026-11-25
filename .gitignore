@@ -37,6 +37,7 @@ coverage/
 *.js.map
 *.d.ts
 !libs/**/src/**/*.d.ts
+!ojchat-mobile/src/types/react-native-vector-icons.d.ts
 
 # Temporary
 tmp/
