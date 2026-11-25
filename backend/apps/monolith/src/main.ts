@@ -65,7 +65,19 @@ export async function createApp(expressInstance?: Express): Promise<NestExpressA
   });
 
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      const allowedOrigins = [
+        process.env.CORS_ORIGIN,
+        'https://ojchat.vercel.app',
+        'https://admin-web-eta-nine.vercel.app',
+        'http://localhost:3013',
+      ].filter(Boolean);
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Not allowed by CORS: ${origin}`));
+      }
+    },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
     allowedHeaders: [
