@@ -13,7 +13,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api, formatApiError } from "@/lib/api";
 import { Loading } from "@/components/shared/loading";
@@ -61,7 +67,7 @@ export default function CreateAdminPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Admin Account Details</h1>
+          <CardTitle className="text-lg">Admin Account Details</CardTitle>
           <p className="text-muted-foreground text-sm">
             Create a new administrator account for platform management.
           </p>
