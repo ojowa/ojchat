@@ -370,7 +370,9 @@ const MomentsScreen: React.FC = () => {
 
   const selectedMoments = React.useMemo(() => {
     if (!selectedUserId) return [];
-    return (groupedByUser.get(selectedUserId) || []).sort(
+    const moments = groupedByUser.get(selectedUserId);
+    if (!moments) return [];
+    return moments.slice().sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
   }, [groupedByUser, selectedUserId]);
@@ -545,6 +547,7 @@ const MomentsScreen: React.FC = () => {
       <FlatList
         data={selectedMoments || []}
         keyExtractor={(item, index) => item.id || String(index)}
+        extraData={[selectedMoments, activeTab, selectedUserId]}
         contentContainerStyle={styles.momentsList}
         refreshControl={
           <RefreshControl
@@ -566,13 +569,16 @@ const MomentsScreen: React.FC = () => {
             </Text>
           </View>
         }
-        renderItem={({ item }) => (
-          <MomentCard
-            moment={item}
-            isOwn={item.userId === user?.id}
-            onDelete={() => handleDeleteMoment(item.id)}
-          />
-        )}
+        renderItem={({ item, index }) => {
+          if (!item) return null;
+          return (
+            <MomentCard
+              moment={item}
+              isOwn={item.userId === user?.id}
+              onDelete={() => handleDeleteMoment(item.id)}
+            />
+          );
+        }}
       />
 
       <CreateMomentModal
