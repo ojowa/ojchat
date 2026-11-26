@@ -57,7 +57,7 @@ export const RootNavigator: React.FC = () => {
   return (
     <NavigationContainer>
       {isAuthenticated && <IncomingCallsListener />}
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Auth">
         {!isAuthenticated ? (
           <Stack.Screen name="Auth" component={AuthNavigator} />
         ) : (
