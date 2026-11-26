@@ -545,8 +545,8 @@ const MomentsScreen: React.FC = () => {
       )}
 
       <FlatList
-        data={selectedMoments || []}
-        keyExtractor={(item, index) => item.id || String(index)}
+        data={Array.isArray(selectedMoments) ? selectedMoments : []}
+        keyExtractor={(item, index) => (item && item.id) || String(index)}
         extraData={[selectedMoments, activeTab, selectedUserId]}
         contentContainerStyle={styles.momentsList}
         refreshControl={

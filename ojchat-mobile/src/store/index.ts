@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import { create } from 'zustand';
-import { devtools, persist, createJSONStorage } from 'zustand/middleware';
+import { devtools, persist } from 'zustand/middleware';
 
 import { mmkvStorage } from '../services/storage/mmkvStorage';
 import { secureStorage } from '../services/storage/secureStorage';
@@ -65,6 +65,52 @@ let queryClientRef: QueryClient | null = null;
 export function bindQueryClient(client: QueryClient) {
   queryClientRef = client;
 }
+
+const appPersistStorage = {
+  getItem: async (name: string) => {
+    await mmkvStorage.waitForInit();
+    const value = mmkvStorage.getString(name);
+    if (!value) return null;
+
+    try {
+      const parsed = JSON.parse(value);
+      const tokens = await loadTokens();
+      return {
+        ...parsed,
+        state: {
+          ...parsed.state,
+          token: tokens.token,
+          refreshToken: tokens.refreshToken,
+        },
+      };
+    } catch {
+      mmkvStorage.remove(name);
+      return null;
+    }
+  },
+  setItem: async (name: string, value: unknown) => {
+    await mmkvStorage.waitForInit();
+    const data = value as { state?: TokenData & Record<string, unknown> };
+    const tokens: TokenData = {
+      token: data.state?.token || null,
+      refreshToken: data.state?.refreshToken || null,
+    };
+    await saveTokens(tokens.token, tokens.refreshToken);
+    const sanitized = {
+      ...data,
+      state: {
+        ...data.state,
+        token: null,
+        refreshToken: null,
+      },
+    };
+    mmkvStorage.set(name, JSON.stringify(sanitized));
+  },
+  removeItem: async (name: string) => {
+    await mmkvStorage.waitForInit();
+    mmkvStorage.remove(name);
+  },
+};
 
 function patchMessagesCache(id: string, patch: Partial<Message> | null) {
   if (!queryClientRef) return;
@@ -187,45 +233,7 @@ export const useAppStore = create<AppState>()(
       }),
       {
         name: STORAGE_KEYS.AUTH_PERSIST,
-        storage: createJSONStorage(() => ({
-          getItem: async (name: string) => {
-            await mmkvStorage.waitForInit();
-            const value = mmkvStorage.getString(name);
-            if (!value) return null;
-            const parsed = JSON.parse(value);
-            const tokens = await loadTokens();
-            return {
-              ...parsed,
-              state: {
-                ...parsed.state,
-                token: tokens.token,
-                refreshToken: tokens.refreshToken,
-              },
-            };
-          },
-          setItem: async (name: string, value: unknown) => {
-            await mmkvStorage.waitForInit();
-            const data = value as any;
-            const tokens: TokenData = {
-              token: data.state?.token || null,
-              refreshToken: data.state?.refreshToken || null,
-            };
-            await saveTokens(tokens.token, tokens.refreshToken);
-            const sanitized = {
-              ...data,
-              state: {
-                ...data.state,
-                token: null,
-                refreshToken: null,
-              },
-            };
-            mmkvStorage.set(name, JSON.stringify(sanitized));
-          },
-          removeItem: async (name: string) => {
-            await mmkvStorage.waitForInit();
-            mmkvStorage.remove(name);
-          },
-        })),
+        storage: appPersistStorage,
         partialize: (state) => ({
           token: state.token,
           refreshToken: state.refreshToken,
