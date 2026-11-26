@@ -256,8 +256,8 @@ Make `@OnEvent` handlers run via an outbox/queue (BullMQ + Redis, or at minimum 
 | # | Status | Priority | Action | Effort |
 |---|---|---|---|---|
 | 1 | ✅ **DONE** (`e5b482e`) | 🔴 **P0 — today** | Fix auth middleware: reject unauthenticated non-public routes + strip client `x-user-id` (§4.1). Add `APP_GUARD`. | <1h |
-| 2 | ✅ **DONE** | 🔴 **P0 — today** | Stop leaking `latitude`/`longitude`/exact DOB in `getFeed` + AI feed (§4.7) | 1h |
-| 3 | ⬜ TODO | 🔴 **P0 — this week** | Add block/existence/target-visibility checks to `like/pass/superlike` (C5) | 2h |
+| 2 | ✅ **DONE** (`63b3e45`) | 🔴 **P0 — today** | Stop leaking `latitude`/`longitude`/exact DOB in `getFeed` + AI feed (§4.7) | 1h |
+| 3 | ✅ **DONE** | 🔴 **P0 — this week** | Add block/existence/target-visibility checks to `like/pass/superlike` (C5) | 2h |
 | 4 | ⬜ TODO | 🔴 **P0 — this week** | Canonical match upsert + partial unique index + transaction (§4.2); atomic daily counters (§4.3) | 3h |
 | 5 | ⬜ TODO | 🟠 **P1** | PostGIS migration + `ST_DWithin` distance filter in `getFeed` — fixes C3 + B5 together (§4.4). Verify/enable `postgis` extension first (passport query already assumes it) | 4h |
 | 6 | ⬜ TODO | 🟠 **P1** | Replace in-memory exclusion arrays & `IN(allIds)` with `NOT EXISTS`/`EXISTS` anti-joins (§4.5); add missing indexes | 4h |
@@ -282,5 +282,17 @@ Make `@OnEvent` handlers run via an outbox/queue (BullMQ + Redis, or at minimum 
 - Mobile updated: `SwipeableCard` and `UserProfileScreen` read the server-derived `age`; `types/match.ts` gained `age` and a `FeedUser` projection.
 - Test infra fix: Jest could not resolve `@app/common/*` (module `moduleNameMapper` does not support regex capture groups) — replaced with `jest.resolver.js` mirroring the tsconfig path aliases.
 - 14 new tests (`profile-redactor.spec.ts`, `users.service.spec.ts`, `search.service.spec.ts`).
+
+**Fix #3 — Swipe target validation (C5)**
+- New `MatchingService.validateSwipeTarget(actorId, targetId)` runs before any like/pass/super-like row is written. It enforces:
+  - the target id is a valid UUID (otherwise a malformed id reached the driver and produced a 500),
+  - the caller and the target both exist,
+  - neither party is `suspended` / `banned` / `deactivated` (`pending_verification` is deliberately allowed — registration creates accounts in that state and only the email OTP promotes them to `active`),
+  - **no block in either direction** — you can no longer like/pass someone who blocked you,
+  - the target actually has an active profile to swipe on.
+- Discovery preferences (age/gender/verified-only/…) are intentionally **not** enforced here: they are discovery filters, not access control, and enforcing them would break the legitimate "search a person → open their profile → like them" flow. Two-way preference filtering stays in item #9.
+- `like()` / `superlike()` were reordered so the idempotency check runs **before** the quota check: re-liking somebody already liked no longer consumes quota and no longer fails with "limit reached" when the user is already at their limit (the app retries likes after a flaky connection). The limit message also showed `limit/limit` before — it now shows the real count.
+- Mobile: swipe failures are surfaced (`Alert` with the server message) and the card is restored instead of staying stuck off-screen; `SwipeableCard` now resets its drag transform when the profile changes, so the next card is actually visible after a drag-swipe.
+- 18 new tests (`matching.service.spec.ts`).
 
 **Bottom line:** fix #1 before anything else — as it stands, any anonymous caller can act as any user. Then privacy redaction (#2), then the match/limit races (#4), then the geospatial + query rework (#5–6) before scaling past a few thousand users. The scoring/caching layers (#7–8) are what turn this from "correct" into "fast at 10k concurrent swipers."

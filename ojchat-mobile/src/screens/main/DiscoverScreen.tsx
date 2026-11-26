@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {
@@ -32,6 +32,7 @@ export const DiscoverScreen: React.FC<MainTabScreenProps<'Discover'>> = ({ navig
   const superLikeMutation = useSuperLike();
   const undoMutation = useUndo();
   const [refreshing, setRefreshing] = useState(false);
+  const [resetToken, setResetToken] = useState(0);
   const viewedIds = useRef(new Set<string>());
   const pendingNewMatch = useAppStore((s) => s.pendingNewMatch);
   const clearPendingMatch = useAppStore((s) => s.clearPendingMatch);
@@ -41,6 +42,19 @@ export const DiscoverScreen: React.FC<MainTabScreenProps<'Discover'>> = ({ navig
     await refetch();
     setRefreshing(false);
   }, [refetch]);
+
+  /**
+   * A swipe can be rejected by the server (daily limit reached, the target
+   * blocked you, the profile is no longer available). The card has already
+   * animated away at that point, so restore it and tell the user why —
+   * otherwise they are left staring at an empty screen.
+   */
+  const onSwipeError = useCallback((error: any) => {
+    const message =
+      error?.response?.data?.message || 'Something went wrong. Please try again.';
+    setResetToken((token) => token + 1);
+    Alert.alert('Unable to swipe', Array.isArray(message) ? message.join('\n') : message);
+  }, []);
 
   // Backend can return candidates with profile: null (user has no profile row)
   const profiles = (data?.candidates || []).filter(
@@ -139,9 +153,12 @@ export const DiscoverScreen: React.FC<MainTabScreenProps<'Discover'>> = ({ navig
         <SwipeableCard
           profile={profiles[0].profile}
           compatibilityScore={profiles[0].overallScore || profiles[0].compatibility?.overallScore}
-          onSwipeLeft={() => passMutation.mutate(profiles[0].user.id)}
-          onSwipeRight={() => likeMutation.mutate(profiles[0].user.id)}
-          onSuperLike={() => superLikeMutation.mutate(profiles[0].user.id)}
+          resetToken={resetToken}
+          onSwipeLeft={() => passMutation.mutate(profiles[0].user.id, { onError: onSwipeError })}
+          onSwipeRight={() => likeMutation.mutate(profiles[0].user.id, { onError: onSwipeError })}
+          onSuperLike={() =>
+            superLikeMutation.mutate(profiles[0].user.id, { onError: onSwipeError })
+          }
           onUndo={() => undoMutation.mutate()}
         />
       </View>

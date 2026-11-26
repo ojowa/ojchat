@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, MoreThan, LessThan, IsNull } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -22,6 +22,7 @@ import {
   Plan,
   Subscription,
   Notification,
+  UserStatus,
 } from '@app/common/entities';
 import { redactProfile, redactUserSummary } from '@app/common/privacy';
 import { MatchmakingEngine } from './ai/matchmaking.engine';
@@ -32,6 +33,21 @@ import { CandidateGenerator } from './ai/candidate.generator';
 import { ToxicityDetector } from './ai/toxicity.detector';
 import { FakeProfileDetector } from './ai/fake-profile.detector';
 import { MatchingEnhancementService } from './matching-enhancement.service';
+
+/**
+ * Account states that must not be able to act on the platform, and whose
+ * profiles must not be reachable.
+ *
+ * `PENDING_VERIFICATION` is deliberately excluded: registration creates the
+ * account in that state and only the email OTP promotes it to `ACTIVE`, so
+ * treating it as restricted would lock out legitimately registered accounts
+ * that have not completed verification yet.
+ */
+const RESTRICTED_STATUSES = new Set<UserStatus>([
+  UserStatus.SUSPENDED,
+  UserStatus.BANNED,
+  UserStatus.DEACTIVATED,
+]);
 
 @Injectable()
 export class MatchingService {
@@ -73,6 +89,66 @@ export class MatchingService {
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)
     ) {
       throw new BadRequestException('Valid user ID is required');
+    }
+  }
+
+  /**
+   * Validate the target of a swipe (like / pass / super like) before any row
+   * is written.
+   *
+   * Without this check any caller could `POST /matching/like/<any-id>` and
+   * create likes/passes for users who blocked them, who are suspended or
+   * deleted, or who do not exist at all — orphan rows, notification spam and a
+   * direct-API way around the product's visibility rules (audit C5).
+   *
+   * Discovery preferences (age range, gender, "verified only", …) are
+   * deliberately NOT enforced here: they are discovery filters, not access
+   * control, and rejecting them would break the legitimate
+   * "search a person -> open their profile -> like them" flow. Two-way
+   * preference filtering is handled separately (audit item #9).
+   */
+  private async validateSwipeTarget(actorId: string, targetId: string): Promise<void> {
+    this.validateUserId(actorId);
+    this.validateUserId(targetId);
+
+    if (actorId === targetId) {
+      throw new BadRequestException('Cannot interact with yourself');
+    }
+
+    // One round trip for both parties.
+    const users = await this.userRepo.find({ where: { id: In([actorId, targetId]) } });
+    const actor = users.find((u) => u.id === actorId);
+    const target = users.find((u) => u.id === targetId);
+
+    if (!actor) throw new NotFoundException('User not found');
+    if (!target) throw new NotFoundException('This user no longer exists');
+
+    // A restricted account cannot act on the platform.
+    if (RESTRICTED_STATUSES.has(actor.status)) {
+      throw new ForbiddenException('Your account is not active');
+    }
+
+    // The target must still be reachable.
+    if (RESTRICTED_STATUSES.has(target.status)) {
+      throw new ForbiddenException('This profile is not available');
+    }
+
+    // A block in either direction ends all interaction — in particular you
+    // cannot like or pass someone who blocked you.
+    const block = await this.blockRepo.findOne({
+      where: [
+        { blockerId: actorId, blockedId: targetId },
+        { blockerId: targetId, blockedId: actorId },
+      ],
+    });
+    if (block) {
+      throw new ForbiddenException('You cannot interact with this user');
+    }
+
+    // There has to be an active profile to swipe on.
+    const profile = await this.profileRepo.findOne({ where: { userId: targetId } });
+    if (!profile || !profile.isActive) {
+      throw new NotFoundException('This profile is not available');
     }
   }
 
@@ -354,29 +430,12 @@ export class MatchingService {
   }
 
   async like(likerId: string, likedId: string) {
-    if (likerId === likedId) throw new BadRequestException('Cannot like yourself');
+    await this.validateSwipeTarget(likerId, likedId);
 
-    const today = new Date().toISOString().split('T')[0];
-    let dailyLike = await this.dailyLikeRepo.findOne({
-      where: { userId: likerId, date: today as any },
-    });
-    if (!dailyLike) {
-      dailyLike = this.dailyLikeRepo.create({
-        userId: likerId,
-        date: today as any,
-        likesGiven: 0,
-        superLikesGiven: 0,
-      });
-      await this.dailyLikeRepo.save(dailyLike);
-    }
-
-    const planInfo = await this.getUserPlanInfo(likerId);
-    if (dailyLike.likesGiven >= planInfo.dailyLikesLimit) {
-      throw new BadRequestException(
-        `Daily like limit reached (${planInfo.dailyLikesLimit}/${planInfo.dailyLikesLimit}). Upgrade your plan for more likes.`,
-      );
-    }
-
+    // Idempotency first: re-liking somebody who was already liked must not
+    // consume quota, and must not fail with "limit reached" when the user is
+    // already at their daily limit (the app retries likes after a flaky
+    // connection).
     const existing = await this.likeRepo.findOne({
       where: { userId: likerId, likedUserId: likedId },
     });
@@ -417,6 +476,29 @@ export class MatchingService {
       }
       return existing;
     }
+
+    // Quota is only consumed by a NEW like.
+    const today = new Date().toISOString().split('T')[0];
+    let dailyLike = await this.dailyLikeRepo.findOne({
+      where: { userId: likerId, date: today as any },
+    });
+    const planInfo = await this.getUserPlanInfo(likerId);
+    const likesGiven = dailyLike?.likesGiven ?? 0;
+    if (likesGiven >= planInfo.dailyLikesLimit) {
+      throw new BadRequestException(
+        `Daily like limit reached (${likesGiven}/${planInfo.dailyLikesLimit}). Upgrade your plan for more likes.`,
+      );
+    }
+    if (!dailyLike) {
+      dailyLike = this.dailyLikeRepo.create({
+        userId: likerId,
+        date: today as any,
+        likesGiven: 0,
+        superLikesGiven: 0,
+      });
+      await this.dailyLikeRepo.save(dailyLike);
+    }
+
     const like = this.likeRepo.create({ userId: likerId, likedUserId: likedId });
     await this.likeRepo.save(like);
     await this.dailyLikeRepo.increment({ id: dailyLike.id }, 'likesGiven', 1);
@@ -476,6 +558,8 @@ export class MatchingService {
   }
 
   async pass(passerId: string, passedId: string) {
+    await this.validateSwipeTarget(passerId, passedId);
+
     const existing = await this.passRepo.findOne({
       where: { userId: passerId, passedUserId: passedId },
     });
@@ -501,29 +585,9 @@ export class MatchingService {
   }
 
   async superlike(likerId: string, likedId: string) {
-    if (likerId === likedId) throw new BadRequestException('Cannot super like yourself');
+    await this.validateSwipeTarget(likerId, likedId);
 
-    const today = new Date().toISOString().split('T')[0];
-    let dailyLike = await this.dailyLikeRepo.findOne({
-      where: { userId: likerId, date: today as any },
-    });
-    if (!dailyLike) {
-      dailyLike = this.dailyLikeRepo.create({
-        userId: likerId,
-        date: today as any,
-        likesGiven: 0,
-        superLikesGiven: 0,
-      });
-      await this.dailyLikeRepo.save(dailyLike);
-    }
-
-    const planInfo = await this.getUserPlanInfo(likerId);
-    if (dailyLike.superLikesGiven >= planInfo.dailySuperLikesLimit) {
-      throw new BadRequestException(
-        `Daily super like limit reached (${planInfo.dailySuperLikesLimit}/${planInfo.dailySuperLikesLimit}). Upgrade your plan for more super likes.`,
-      );
-    }
-
+    // Idempotency first (see like()): an existing like must not consume quota.
     const existing = await this.likeRepo.findOne({
       where: { userId: likerId, likedUserId: likedId },
     });
@@ -563,6 +627,28 @@ export class MatchingService {
         }
       }
       return existing;
+    }
+
+    // Quota is only consumed by a NEW super like.
+    const today = new Date().toISOString().split('T')[0];
+    let dailyLike = await this.dailyLikeRepo.findOne({
+      where: { userId: likerId, date: today as any },
+    });
+    const planInfo = await this.getUserPlanInfo(likerId);
+    const superLikesGiven = dailyLike?.superLikesGiven ?? 0;
+    if (superLikesGiven >= planInfo.dailySuperLikesLimit) {
+      throw new BadRequestException(
+        `Daily super like limit reached (${superLikesGiven}/${planInfo.dailySuperLikesLimit}). Upgrade your plan for more super likes.`,
+      );
+    }
+    if (!dailyLike) {
+      dailyLike = this.dailyLikeRepo.create({
+        userId: likerId,
+        date: today as any,
+        likesGiven: 0,
+        superLikesGiven: 0,
+      });
+      await this.dailyLikeRepo.save(dailyLike);
     }
 
     const like = this.likeRepo.create({ userId: likerId, likedUserId: likedId, isSuperLike: true });

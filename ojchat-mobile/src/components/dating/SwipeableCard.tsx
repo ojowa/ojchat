@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, Image, StyleSheet, useWindowDimensions, TouchableOpacity } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -24,6 +24,11 @@ interface SwipeableCardProps {
   onSwipeRight: () => void;
   onSuperLike?: () => void;
   onUndo?: () => void;
+  /**
+   * Bump this to force the card back to its resting position — used when a
+   * swipe request is rejected by the server and the card has to come back.
+   */
+  resetToken?: number;
   style?: any;
 }
 
@@ -43,12 +48,21 @@ export const SwipeableCard: React.FC<SwipeableCardProps> = ({
   onSwipeRight,
   onSuperLike,
   onUndo,
+  resetToken,
   style,
 }) => {
   const { width: screenWidth } = useWindowDimensions();
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const SWIPE_THRESHOLD = screenWidth * 0.3;
+
+  // Reset the card when a different profile is shown. Without this the card
+  // keeps the off-screen transform from the previous drag swipe, so the next
+  // profile renders invisible and the user is stuck on a blank screen.
+  useEffect(() => {
+    translateX.value = 0;
+    translateY.value = 0;
+  }, [profile?.id, resetToken, translateX, translateY]);
 
   const panGesture = Gesture.Pan()
     .onUpdate((e) => {

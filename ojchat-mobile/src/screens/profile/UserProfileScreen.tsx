@@ -86,6 +86,11 @@ export const UserProfileScreen: React.FC<RootStackScreenProps<'UserProfile'>> = 
       queryClient.invalidateQueries({ queryKey: ['matchFeed'] });
       navigation.goBack();
     },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message || 'Something went wrong. Please try again.';
+      Alert.alert('Unable to like', Array.isArray(message) ? message.join('\n') : message);
+    },
   });
 
   const passMutation = useMutation({
@@ -93,6 +98,11 @@ export const UserProfileScreen: React.FC<RootStackScreenProps<'UserProfile'>> = 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['matchFeed'] });
       navigation.goBack();
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message || 'Something went wrong. Please try again.';
+      Alert.alert('Unable to pass', Array.isArray(message) ? message.join('\n') : message);
     },
   });
 
