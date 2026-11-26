@@ -78,8 +78,9 @@ export const SwipeableCard: React.FC<SwipeableCardProps> = ({
     ],
   }));
 
-  const primaryPhoto = profile.photos.find((p) => p.isPrimary) || profile.photos[0];
-  const age = profile.dateOfBirth ? calculateAge(profile.dateOfBirth) : null;
+  const photos = profile?.photos || [];
+  const primaryPhoto = photos.find((p) => p.isPrimary) || photos[0];
+  const age = profile?.dateOfBirth ? calculateAge(profile.dateOfBirth) : null;
 
   return (
     <View style={[styles.wrapper, style]}>

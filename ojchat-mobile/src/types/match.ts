@@ -72,7 +72,7 @@ export interface CompatibilityData {
 
 export interface MatchFeedItem {
   user: User;
-  profile: Profile;
+  profile: Profile | null;
   compatibility?: CompatibilityData;
   compatibilityScore?: number;
   overallScore?: number;

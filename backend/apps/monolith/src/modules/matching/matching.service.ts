@@ -264,22 +264,24 @@ export class MatchingService {
       }
     }
 
-    const candidates = sortedUserIds.map((uid) => {
-      const u = users.find((usr) => usr.id === uid)!;
-      const profile = profileMap.get(u.id);
-      const profilePhotos = profile ? photoMap.get(profile.id) || [] : [];
-      const profileInterestsList = profile ? interestMap.get(profile.id) || [] : [];
-      return {
-        user: { id: u.id, fullName: u.fullName, dateOfBirth: u.dateOfBirth, gender: u.gender },
-        profile: profile
-          ? {
-              ...profile,
-              photos: profilePhotos,
-              interests: profileInterestsList,
-            }
-          : null,
-      };
-    });
+    const candidates = sortedUserIds
+      .filter((uid) => profileMap.has(uid)) // skip users with no profile row (unshowable)
+      .map((uid) => {
+        const u = users.find((usr) => usr.id === uid)!;
+        const profile = profileMap.get(u.id);
+        const profilePhotos = profile ? photoMap.get(profile.id) || [] : [];
+        const profileInterestsList = profile ? interestMap.get(profile.id) || [] : [];
+        return {
+          user: { id: u.id, fullName: u.fullName, dateOfBirth: u.dateOfBirth, gender: u.gender },
+          profile: profile
+            ? {
+                ...profile,
+                photos: profilePhotos,
+                interests: profileInterestsList,
+              }
+            : null,
+        };
+      });
 
     const enriched = await Promise.all(
       candidates.map(async (c) => {

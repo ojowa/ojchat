@@ -21,6 +21,7 @@ import { spacing } from '../../theme/spacing';
 import { borderRadius } from '../../theme/borderRadius';
 import { useAppStore } from '../../store';
 import { logger } from '../../utils/logger';
+import type { MatchFeedItem, Profile } from '../../types/match';
 import type { MainTabScreenProps } from '../../navigation/types';
 
 export const DiscoverScreen: React.FC<MainTabScreenProps<'Discover'>> = ({ navigation }) => {
@@ -41,7 +42,10 @@ export const DiscoverScreen: React.FC<MainTabScreenProps<'Discover'>> = ({ navig
     setRefreshing(false);
   }, [refetch]);
 
-  const profiles = data?.candidates || [];
+  // Backend can return candidates with profile: null (user has no profile row)
+  const profiles = (data?.candidates || []).filter(
+    (c): c is MatchFeedItem & { profile: Profile } => c.profile != null,
+  );
 
   useEffect(() => {
     if (pendingNewMatch && navigation) {
