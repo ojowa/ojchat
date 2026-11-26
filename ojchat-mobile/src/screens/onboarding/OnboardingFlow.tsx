@@ -1,3 +1,4 @@
+import { useNavigation } from '@react-navigation/native';
 import React, { useRef, useState } from 'react';
 import {
   View,
@@ -8,11 +9,11 @@ import {
   NativeScrollEvent,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+
 import { Button, Text } from '../../components/common';
+import { borderRadius } from '../../theme/borderRadius';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
-import { borderRadius } from '../../theme/borderRadius';
 
 interface OnboardingStep {
   id: number;
@@ -62,7 +63,7 @@ const OnboardingFlow: React.FC = () => {
         animated: true,
       });
     } else {
-      navigation.replace('Login');
+      navigation.replace('Register');
     }
   };
 

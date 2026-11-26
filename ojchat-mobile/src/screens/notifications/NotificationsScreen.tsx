@@ -73,7 +73,7 @@ const NotificationsScreen: React.FC = ({ navigation }: any) => {
 
   const handleNotificationPress = (notification: any) => {
     if (notification.type === 'match') {
-      navigation.navigate('MainTab', { screen: 'Matches' });
+      navigation.navigate('Main', { screen: 'Matches' });
     } else if (notification.type === 'message') {
       if (notification.conversationId) {
         navigation.navigate('Conversation', {
@@ -83,7 +83,7 @@ const NotificationsScreen: React.FC = ({ navigation }: any) => {
         });
       }
     } else if (notification.type === 'like') {
-      navigation.navigate('MainTab', { screen: 'LikesYou' });
+      navigation.navigate('LikesYou');
     }
   };
 

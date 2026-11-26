@@ -64,10 +64,12 @@ export const RootNavigator: React.FC = () => {
     <NavigationContainer>
       {isAuthenticated && <IncomingCallsListener />}
       <Stack.Navigator
+        key={isAuthenticated ? 'authenticated' : 'unauthenticated'}
         screenOptions={{ headerShown: false }}
         initialRouteName={isAuthenticated ? 'Main' : 'Auth'}
       >
         <Stack.Screen name="Auth" component={AuthNavigator} />
+        <Stack.Screen name="Main" component={MainTabNavigator} />
         {/* Chat */}
         <Stack.Screen
           name="Conversation"

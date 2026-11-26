@@ -16,27 +16,26 @@ function isAllowedUrl(url: string): boolean {
 
 async function isLocalReachable(): Promise<boolean> {
   if (!LOCAL_API || !isAllowedUrl(LOCAL_API)) return false;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
     const res = await fetch(`${LOCAL_API.replace('/v1', '')}/v1/health`, {
       method: 'GET',
       signal: controller.signal,
     });
-    clearTimeout(timeout);
     return res.ok;
   } catch {
     return false;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
 export async function resolveApiUrl(): Promise<string> {
   if (cachedApiUrl) return cachedApiUrl;
 
-  if (LOCAL_API && isAllowedUrl(LOCAL_API)) {
-    if (__DEV__ || (await isLocalReachable())) {
-      cachedApiUrl = LOCAL_API;
-    }
+  if (LOCAL_API && isAllowedUrl(LOCAL_API) && (await isLocalReachable())) {
+    cachedApiUrl = LOCAL_API;
   }
   if (!cachedApiUrl && PUBLIC_API && isHttps(PUBLIC_API)) {
     cachedApiUrl = PUBLIC_API;
@@ -54,10 +53,8 @@ export async function resolveApiUrl(): Promise<string> {
 export async function resolveWsUrl(): Promise<string> {
   if (cachedWsUrl) return cachedWsUrl;
 
-  if (LOCAL_WS && isAllowedUrl(LOCAL_WS)) {
-    if (__DEV__ || (await isLocalReachable())) {
-      cachedWsUrl = LOCAL_WS;
-    }
+  if (LOCAL_WS && isAllowedUrl(LOCAL_WS) && (await isLocalReachable())) {
+    cachedWsUrl = LOCAL_WS;
   }
   if (!cachedWsUrl && PUBLIC_WS && isHttps(PUBLIC_WS)) {
     cachedWsUrl = PUBLIC_WS;

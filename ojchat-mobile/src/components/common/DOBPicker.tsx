@@ -1,9 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, FlatList, TextInput } from 'react-native';
-import { colors } from '../../theme/colors';
-import { typography } from '../../theme/typography';
-import { spacing } from '../../theme/spacing';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Modal,
+  ScrollView,
+  TextInput,
+} from 'react-native';
+
 import { borderRadius } from '../../theme/borderRadius';
+import { colors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 
 interface DOBPickerProps {
   value: string;
@@ -90,33 +99,29 @@ function WheelPicker({
                 <Text style={styles.pickerDone}>Done</Text>
               </TouchableOpacity>
             </View>
-            <FlatList
-              data={items.map(String)}
-              keyExtractor={(item) => item}
-              style={styles.pickerList}
-              showsVerticalScrollIndicator={false}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.pickerItem,
-                    String(selected) === item && styles.pickerItemSelected,
-                  ]}
-                  onPress={() => {
-                    onSelect(item);
-                    setVisible(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.pickerItemText,
-                      String(selected) === item && styles.pickerItemTextSelected,
-                    ]}
+            <ScrollView style={styles.pickerList} showsVerticalScrollIndicator={false}>
+              {items.map((item) => {
+                const itemValue = String(item);
+                const isSelected = String(selected) === itemValue;
+
+                return (
+                  <TouchableOpacity
+                    key={itemValue}
+                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                    onPress={() => {
+                      onSelect(itemValue);
+                      setVisible(false);
+                    }}
                   >
-                    {item}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            />
+                    <Text
+                      style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}
+                    >
+                      {itemValue}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>

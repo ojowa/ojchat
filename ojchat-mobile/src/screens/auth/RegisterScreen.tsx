@@ -9,18 +9,22 @@ import {
   TouchableOpacity,
   Alert,
   Linking,
+  StatusBar,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Input } from '../../components/common/Input';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+
 import { Button } from '../../components/common/Button';
-import { useAuth } from '../../hooks/useAuth';
-import { getPasswordStrength } from '../../utils/validators';
-import { colors } from '../../theme/colors';
-import { typography } from '../../theme/typography';
-import { spacing } from '../../theme/spacing';
-import { CONFIG_URLS } from '../../constants/config';
-import { borderRadius } from '../../theme/borderRadius';
 import { DOBPicker } from '../../components/common/DOBPicker';
+import { Input } from '../../components/common/Input';
+import { CONFIG_URLS } from '../../constants/config';
+import { useAuth } from '../../hooks/useAuth';
+import { borderRadius } from '../../theme/borderRadius';
+import { colors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
+import { getPasswordStrength } from '../../utils/validators';
 
 interface RegisterScreenProps {
   navigation: any;
@@ -181,123 +185,162 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView contentContainerStyle={styles.content}>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Find your perfect match</Text>
+        <StatusBar barStyle="light-content" backgroundColor={colors.gradientStart} />
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <LinearGradient colors={[colors.gradientStart, colors.gradientEnd]} style={styles.hero}>
+            <View style={styles.brandRow}>
+              <View style={styles.brandMark}>
+                <Ionicons name="heart" size={18} color={colors.primary} />
+              </View>
+              <Text style={styles.brandName}>OJCHAT</Text>
+            </View>
+            <Text style={styles.title}>Create your account</Text>
+            <Text style={styles.subtitle}>Meet people who make life feel more meaningful.</Text>
+          </LinearGradient>
 
-          <Input
-            label="Full Name"
-            placeholder="Enter your full name"
-            value={fullName}
-            onChangeText={(v) => updateField('fullName', v)}
-            autoCapitalize="words"
-            error={errors.fullName}
-          />
-          <Input
-            label="Email"
-            placeholder="Enter your email"
-            value={email}
-            onChangeText={(v) => updateField('email', v)}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            error={errors.email}
-          />
-          <DOBPicker
-            value={dateOfBirth}
-            onChange={(v) => updateField('dateOfBirth', v)}
-            error={errors.dateOfBirth}
-          />
+          <View style={styles.formCard}>
+            <View style={styles.formIntro}>
+              <Text style={styles.formTitle}>Your details</Text>
+              <Text style={styles.formHint}>A few details to get you started.</Text>
+            </View>
 
-          <Text style={styles.fieldLabel}>Gender</Text>
-          <View style={styles.genderRow}>
-            {GENDERS.map((g) => (
-              <TouchableOpacity
-                key={g}
-                style={[styles.genderOption, gender === g && styles.genderSelected]}
-                onPress={() => updateField('gender', g)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.genderText, gender === g && styles.genderTextSelected]}>
-                  {g}
+            <Input
+              label="Full Name"
+              placeholder="Enter your full name"
+              value={fullName}
+              onChangeText={(v) => updateField('fullName', v)}
+              autoCapitalize="words"
+              error={errors.fullName}
+              style={styles.inputField}
+            />
+            <Input
+              label="Email"
+              placeholder="Enter your email"
+              value={email}
+              onChangeText={(v) => updateField('email', v)}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              error={errors.email}
+              style={styles.inputField}
+            />
+            <DOBPicker
+              value={dateOfBirth}
+              onChange={(v) => updateField('dateOfBirth', v)}
+              error={errors.dateOfBirth}
+            />
+
+            <Text style={styles.fieldLabel}>Gender</Text>
+            <View style={styles.genderRow}>
+              {GENDERS.map((g) => (
+                <TouchableOpacity
+                  key={g}
+                  style={[styles.genderOption, gender === g && styles.genderSelected]}
+                  onPress={() => updateField('gender', g)}
+                  activeOpacity={0.7}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: gender === g }}
+                >
+                  <Text style={[styles.genderText, gender === g && styles.genderTextSelected]}>
+                    {g}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {errors.gender && <Text style={styles.fieldError}>{errors.gender}</Text>}
+
+            <Input
+              label="Password"
+              placeholder="Min 8 chars, 1 uppercase, 1 number"
+              value={password}
+              onChangeText={(v) => updateField('password', v)}
+              secureTextEntry
+              error={errors.password}
+              style={styles.inputField}
+            />
+            {passwordStrength && (
+              <View style={styles.strengthRow}>
+                <View style={styles.strengthTrack}>
+                  <View
+                    style={[
+                      styles.strengthBar,
+                      {
+                        width:
+                          passwordStrength === 'weak'
+                            ? '33%'
+                            : passwordStrength === 'medium'
+                              ? '66%'
+                              : '100%',
+                        backgroundColor: STRENGTH_COLORS[passwordStrength],
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.strengthText, { color: STRENGTH_COLORS[passwordStrength] }]}>
+                  {passwordStrength.charAt(0).toUpperCase() + passwordStrength.slice(1)}
                 </Text>
-              </TouchableOpacity>
-            ))}
+              </View>
+            )}
+
+            <Input
+              label="Confirm Password"
+              placeholder="Confirm your password"
+              value={confirmPassword}
+              onChangeText={(v) => updateField('confirmPassword', v)}
+              secureTextEntry
+              error={errors.confirmPassword}
+              style={styles.inputField}
+            />
+
+            <TouchableOpacity
+              style={styles.termsRow}
+              onPress={() => setTermsAccepted(!termsAccepted)}
+              activeOpacity={0.7}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: termsAccepted }}
+            >
+              <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
+                {termsAccepted && <Text style={styles.checkmark}>✓</Text>}
+              </View>
+              <Text style={styles.termsText}>
+                I agree to the{' '}
+                <Text style={styles.termsLink} onPress={() => Linking.openURL(CONFIG_URLS.TERMS)}>
+                  Terms of Service
+                </Text>{' '}
+                and{' '}
+                <Text style={styles.termsLink} onPress={() => Linking.openURL(CONFIG_URLS.PRIVACY)}>
+                  Privacy Policy
+                </Text>
+              </Text>
+            </TouchableOpacity>
+            {errors.terms && <Text style={styles.fieldError}>{errors.terms}</Text>}
+
+            {(authError || serverError) && (
+              <View style={styles.errorBanner}>
+                <Ionicons name="alert-circle-outline" size={18} color={colors.error} />
+                <Text style={styles.error}>
+                  {authError || serverError}
+                  {cooldown > 0 ? ` (${cooldown}s)` : ''}
+                </Text>
+              </View>
+            )}
+            <Button
+              title={cooldown > 0 ? `Try again in ${cooldown}s` : 'Create Account'}
+              onPress={handleRegister}
+              loading={loading}
+              disabled={cooldown > 0}
+              style={styles.button}
+            />
+            <Button
+              title="Already have an account? Sign In"
+              variant="ghost"
+              onPress={() => navigation.goBack()}
+              style={styles.signInButton}
+            />
           </View>
-          {errors.gender && <Text style={styles.fieldError}>{errors.gender}</Text>}
-
-          <Input
-            label="Password"
-            placeholder="Min 8 chars, 1 uppercase, 1 number"
-            value={password}
-            onChangeText={(v) => updateField('password', v)}
-            secureTextEntry
-            error={errors.password}
-          />
-          {passwordStrength && (
-            <View style={styles.strengthRow}>
-              <View
-                style={[styles.strengthBar, { backgroundColor: STRENGTH_COLORS[passwordStrength] }]}
-              />
-              <Text style={[styles.strengthText, { color: STRENGTH_COLORS[passwordStrength] }]}>
-                {passwordStrength.charAt(0).toUpperCase() + passwordStrength.slice(1)}
-              </Text>
-            </View>
-          )}
-
-          <Input
-            label="Confirm Password"
-            placeholder="Confirm your password"
-            value={confirmPassword}
-            onChangeText={(v) => updateField('confirmPassword', v)}
-            secureTextEntry
-            error={errors.confirmPassword}
-          />
-
-          <TouchableOpacity
-            style={styles.termsRow}
-            onPress={() => setTermsAccepted(!termsAccepted)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
-              {termsAccepted && <Text style={styles.checkmark}>✓</Text>}
-            </View>
-            <Text style={styles.termsText}>
-              I agree to the{' '}
-              <Text
-                style={styles.termsLink}
-                onPress={() => Linking.openURL(CONFIG_URLS.TERMS)}
-              >
-                Terms of Service
-              </Text>{' '}
-              and{' '}
-              <Text
-                style={styles.termsLink}
-                onPress={() => Linking.openURL(CONFIG_URLS.PRIVACY)}
-              >
-                Privacy Policy
-              </Text>
-            </Text>
-          </TouchableOpacity>
-          {errors.terms && <Text style={styles.fieldError}>{errors.terms}</Text>}
-
-          {(authError || serverError) && (
-            <Text style={styles.error}>
-              {authError || serverError}
-              {cooldown > 0 ? ` (${cooldown}s)` : ''}
-            </Text>
-          )}
-          <Button
-            title={cooldown > 0 ? `Try again in ${cooldown}s` : 'Create Account'}
-            onPress={handleRegister}
-            loading={loading}
-            disabled={cooldown > 0}
-            style={styles.button}
-          />
-          <Button
-            title="Already have an account? Sign In"
-            variant="ghost"
-            onPress={() => navigation.goBack()}
-          />
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -305,50 +348,112 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.white },
+  safeArea: { flex: 1, backgroundColor: colors.gray50 },
   container: { flex: 1 },
-  content: { padding: spacing.xl, paddingTop: spacing.md },
-  title: { ...typography.h1, marginBottom: spacing.xs },
-  subtitle: { ...typography.body, color: colors.textSecondary, marginBottom: spacing.xl },
+  content: { flexGrow: 1, paddingBottom: spacing.xl },
+  hero: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xxl,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+  },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  brandMark: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandName: {
+    ...typography.small,
+    color: colors.whiteOverlaySoft,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+  },
+  title: {
+    ...typography.h1,
+    color: colors.white,
+    fontSize: 30,
+    lineHeight: 36,
+    marginTop: spacing.lg,
+    marginBottom: spacing.xs,
+  },
+  subtitle: {
+    ...typography.body,
+    color: colors.whiteOverlaySoft,
+    maxWidth: 300,
+  },
+  formCard: {
+    marginHorizontal: spacing.md,
+    marginTop: -spacing.lg,
+    padding: spacing.lg,
+    backgroundColor: colors.white,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.gray100,
+    shadowColor: colors.textPrimary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    elevation: 3,
+  },
+  formIntro: { marginBottom: spacing.lg },
+  formTitle: { ...typography.h3, color: colors.textPrimary, marginBottom: spacing.xs },
+  formHint: { ...typography.caption, color: colors.textSecondary },
+  inputField: { marginBottom: spacing.sm },
   fieldLabel: {
     ...typography.caption,
     color: colors.textSecondary,
     fontWeight: '600',
     marginBottom: spacing.sm,
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
   },
-  genderRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
+  genderRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   genderOption: {
     flex: 1,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.input,
+    minHeight: 48,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.card,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.white,
   },
-  genderSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
-  genderText: { ...typography.body, color: colors.textPrimary },
-  genderTextSelected: { color: colors.white },
+  genderSelected: { backgroundColor: colors.primaryLight, borderColor: colors.primary },
+  genderText: { ...typography.body, color: colors.textSecondary, fontWeight: '600' },
+  genderTextSelected: { color: colors.primary },
   fieldError: { ...typography.small, color: colors.error, marginBottom: spacing.sm },
   strengthRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    marginBottom: spacing.md,
-    marginTop: -spacing.sm,
+    marginBottom: spacing.sm,
+    marginTop: -spacing.xs,
   },
-  strengthBar: { height: 3, width: 40, borderRadius: 2 },
+  strengthTrack: {
+    width: 64,
+    height: 5,
+    borderRadius: 3,
+    overflow: 'hidden',
+    backgroundColor: colors.gray100,
+  },
+  strengthBar: { height: '100%', borderRadius: 3 },
   strengthText: { ...typography.small, fontWeight: '600' },
   termsRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: spacing.sm,
-    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+    marginTop: spacing.md,
+    paddingVertical: spacing.xs,
   },
   checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 4,
+    width: 24,
+    height: 24,
+    borderRadius: 7,
     borderWidth: 2,
     borderColor: colors.border,
     alignItems: 'center',
@@ -358,8 +463,18 @@ const styles = StyleSheet.create({
   },
   checkboxChecked: { backgroundColor: colors.primary, borderColor: colors.primary },
   checkmark: { color: colors.white, fontSize: 14, fontWeight: '700' },
-  termsText: { ...typography.caption, color: colors.textSecondary, flex: 1, lineHeight: 20 },
+  termsText: { ...typography.caption, color: colors.textSecondary, flex: 1, lineHeight: 21 },
   termsLink: { color: colors.primary, fontWeight: '600' },
-  error: { ...typography.caption, color: colors.error, marginBottom: spacing.md },
-  button: { marginTop: spacing.md },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.redLight,
+  },
+  error: { ...typography.caption, color: colors.error, flex: 1 },
+  button: { marginTop: spacing.md, borderRadius: borderRadius.card, elevation: 2 },
+  signInButton: { marginTop: spacing.xs },
 });

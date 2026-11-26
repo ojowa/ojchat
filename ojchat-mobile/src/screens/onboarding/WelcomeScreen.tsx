@@ -1,12 +1,19 @@
-import React from 'react';
-import { View, StyleSheet, StatusBar, useWindowDimensions } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import React from 'react';
+import {
+  View,
+  StyleSheet,
+  StatusBar,
+  useWindowDimensions,
+  ScrollView,
+  Pressable,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { Button, Text } from '../../components/common';
-import { colors } from '../../theme/colors';
-import { typography } from '../../theme/typography';
-import { spacing } from '../../theme/spacing';
 import { borderRadius } from '../../theme/borderRadius';
+import { colors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
 
 const WelcomeScreen: React.FC = () => {
   const { width: screenWidth } = useWindowDimensions();
@@ -17,71 +24,77 @@ const WelcomeScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <View style={styles.content}>
-        <View style={styles.heroArea}>
-          <View style={styles.logoContainer}>
-            <View
-              style={[
-                styles.logoCircle,
-                { width: logoSize, height: logoSize, borderRadius: logoSize / 2 },
-              ]}
-            >
-              <View style={styles.heart}>
-                <View
-                  style={[
-                    styles.heartHalf,
-                    { width: heartSize, height: heartSize, borderRadius: heartSize / 2 },
-                    styles.heartLeft,
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.heartHalf,
-                    { width: heartSize, height: heartSize, borderRadius: heartSize / 2 },
-                    styles.heartRight,
-                  ]}
-                />
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.content}>
+          <View style={styles.heroArea}>
+            <View style={styles.logoContainer}>
+              <View
+                style={[
+                  styles.logoCircle,
+                  { width: logoSize, height: logoSize, borderRadius: logoSize / 2 },
+                ]}
+              >
+                <View style={styles.heart}>
+                  <View
+                    style={[
+                      styles.heartHalf,
+                      { width: heartSize, height: heartSize, borderRadius: heartSize / 2 },
+                      styles.heartLeft,
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.heartHalf,
+                      { width: heartSize, height: heartSize, borderRadius: heartSize / 2 },
+                      styles.heartRight,
+                    ]}
+                  />
+                </View>
               </View>
+              <Text
+                variant="h1"
+                style={[styles.logoText, { fontSize: Math.min(36, screenWidth * 0.09) }]}
+              >
+                OJChat
+              </Text>
             </View>
-            <Text
-              variant="h1"
-              style={[styles.logoText, { fontSize: Math.min(36, screenWidth * 0.09) }]}
-            >
-              OJChat
+          </View>
+
+          <View style={styles.textArea}>
+            <Text variant="h1" style={styles.heading} accessibilityRole="header">
+              Welcome to OJChat
+            </Text>
+            <Text variant="body" style={styles.subtitle}>
+              Join millions finding meaningful connections
             </Text>
           </View>
-        </View>
 
-        <View style={styles.textArea}>
-          <Text variant="h1" style={styles.heading}>
-            Welcome to OJChat
-          </Text>
-          <Text variant="body" style={styles.subtitle}>
-            Join millions finding meaningful connections
-          </Text>
-        </View>
-
-        <View style={styles.actions}>
-          <Button
-            title="Get Started"
-            onPress={() => navigation.navigate('Register')}
-            size="large"
-            style={styles.getStartedButton}
-          />
-          <View style={styles.loginRow}>
-            <Text variant="body" style={styles.loginText}>
-              Already have an account?{' '}
-            </Text>
-            <Text
-              variant="body"
-              style={styles.loginLink}
-              onPress={() => navigation.navigate('Login')}
-            >
-              Log In
-            </Text>
+          <View style={styles.actions}>
+            <Button
+              title="Get Started"
+              onPress={() => navigation.navigate('Onboarding')}
+              size="large"
+              style={styles.getStartedButton}
+            />
+            <View style={styles.loginRow}>
+              <Text variant="body" style={styles.loginText}>
+                Already have an account?{' '}
+              </Text>
+              <Pressable
+                onPress={() => navigation.navigate('Login')}
+                accessibilityRole="link"
+                accessibilityLabel="Log in to your account"
+                hitSlop={8}
+                style={styles.loginLinkButton}
+              >
+                <Text variant="body" style={styles.loginLink}>
+                  Log In
+                </Text>
+              </Pressable>
+            </View>
           </View>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -90,6 +103,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   content: {
     flex: 1,
@@ -153,6 +169,10 @@ const styles = StyleSheet.create({
   loginRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  loginLinkButton: {
+    minHeight: 44,
+    justifyContent: 'center',
   },
   loginText: {
     color: colors.textSecondary,

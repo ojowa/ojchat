@@ -130,9 +130,6 @@ export const ENDPOINTS = {
     USERS: '/search/users',
     AUTOCOMPLETE: '/search/autocomplete',
   },
-  SYNC: {
-    VECTOR_CLOCK: '/sync/vector-clock',
-  },
   CONTENT: {
     SAFETY_TIPS: '/content/safety-tips',
   },

@@ -388,29 +388,7 @@ export class SyncEngine {
     if (row) {
       return new VectorClock(row.value);
     }
-
-    try {
-      const response = await apiClient.get(ENDPOINTS.SYNC.VECTOR_CLOCK);
-      const vc = response.data?.data?.vectorClock || response.data?.vectorClock;
-      if (vc) {
-        const clock = new VectorClock(vc);
-        await this.saveVectorClock(clock);
-        return clock;
-      }
-    } catch (e) {
-      console.error('Failed to fetch server vector clock:', e);
-    }
-
     return new VectorClock();
-  }
-
-  private async saveVectorClock(clock: VectorClock): Promise<void> {
-    const db = await getDatabase();
-    await db.runAsync(
-      `INSERT OR REPLACE INTO sync_metadata (key, value, updated_at)
-       VALUES ('vector_clock', ?, ?)`,
-      [clock.serialize(), Date.now()],
-    );
   }
 
   async enqueue(operation: SyncOperation): Promise<void> {
