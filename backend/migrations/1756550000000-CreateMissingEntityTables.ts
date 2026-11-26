@@ -2,6 +2,12 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class CreateMissingEntityTables1756550000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
+    if (await queryRunner.hasTable('moments')) {
+      await queryRunner.query(
+        `ALTER TABLE "moments" ADD COLUMN IF NOT EXISTS "deletedAt" TIMESTAMP`,
+      );
+    }
+
     const statements = [
       'CREATE TABLE IF NOT EXISTS "verification_requests" ("id" uuid NOT NULL DEFAULT gen_random_uuid(), "userId" character varying NOT NULL, "selfieUrl" character varying NOT NULL, "status" character varying NOT NULL DEFAULT \'pending\', "faceWidth" integer, "faceHeight" integer, "faceConfidence" numeric(5,4), "livenessScore" numeric(5,4), "imageWidth" integer, "imageHeight" integer, "fileSize" integer, "reviewedBy" character varying, "reviewedAt" TIMESTAMP, "rejectionReason" character varying, "faceLandmarks" jsonb, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_c5d405ea25e8abd5b0b096a4f6f" PRIMARY KEY ("id"))',
       'CREATE TABLE IF NOT EXISTS "user_prompts" ("id" uuid NOT NULL DEFAULT gen_random_uuid(), "userId" character varying NOT NULL, "question" character varying NOT NULL, "answer" character varying NOT NULL, "sortOrder" integer NOT NULL DEFAULT \'0\', "createdAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_ed13a8af6a75a1c058ed61e0f8d" PRIMARY KEY ("id"))',
@@ -38,6 +44,34 @@ export class CreateMissingEntityTables1756550000000 implements MigrationInterfac
       'CREATE TABLE IF NOT EXISTS "boosts" ("id" uuid NOT NULL DEFAULT gen_random_uuid(), "userId" character varying NOT NULL, "durationMinutes" integer NOT NULL DEFAULT \'30\', "expiresAt" TIMESTAMP, "isActive" boolean NOT NULL DEFAULT true, "viewsGained" integer NOT NULL DEFAULT \'0\', "likesGained" integer NOT NULL DEFAULT \'0\', "activeAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_225335d93bbce36b48152a26b48" PRIMARY KEY ("id"))',
       'CREATE INDEX IF NOT EXISTS "IDX_9cb0d14edb9c3be07b9226d2f7" ON "boosts" ("userId", "activeAt")',
     ];
+
+    const notificationColumns = await queryRunner.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'notification_deliveries'`,
+    );
+    const existingNotificationColumns = new Set<string>(
+      notificationColumns.map((column: { column_name: string }) => column.column_name),
+    );
+    const legacyNotificationColumns: [string, string][] = [
+      ['notificationid', 'notificationId'],
+      ['userid', 'userId'],
+      ['deliveredat', 'deliveredAt'],
+      ['openedat', 'openedAt'],
+      ['clickedat', 'clickedAt'],
+      ['failurereason', 'failureReason'],
+      ['createdat', 'createdAt'],
+    ];
+    for (const [legacyName, entityName] of legacyNotificationColumns) {
+      if (
+        existingNotificationColumns.has(legacyName) &&
+        !existingNotificationColumns.has(entityName)
+      ) {
+        await queryRunner.query(
+          `ALTER TABLE "notification_deliveries" RENAME COLUMN "${legacyName}" TO "${entityName}"`,
+        );
+        existingNotificationColumns.delete(legacyName);
+        existingNotificationColumns.add(entityName);
+      }
+    }
 
     for (const sql of statements) {
       try {
