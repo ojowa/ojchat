@@ -3,12 +3,12 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   RefreshControl,
   TouchableOpacity,
   Image,
   Alert,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useMatches } from '../../hooks/useMatch';
@@ -100,7 +100,7 @@ export const MatchesScreen: React.FC<MainTabScreenProps<'Matches'>> = ({ navigat
             <Text style={styles.emptySubtext}>Keep swiping to find your match!</Text>
           </View>
         ) : (
-          <FlatList
+          <FlashList
             data={matches}
             keyExtractor={(item: Match, index: number) => item?.id || String(index)}
             extraData={[matches]}

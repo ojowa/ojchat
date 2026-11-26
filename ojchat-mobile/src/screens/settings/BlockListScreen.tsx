@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../services/api/apiClient';
@@ -60,7 +61,7 @@ export default function BlockListScreen() {
           <Text style={styles.emptySubtitle}>You haven't blocked anyone yet.</Text>
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={blockedUsers}
           keyExtractor={(item, index) => item?.id || String(index)}
           renderItem={({ item }) => (

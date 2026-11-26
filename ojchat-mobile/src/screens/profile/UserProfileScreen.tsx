@@ -7,12 +7,12 @@ import {
   Image,
   TouchableOpacity,
   useWindowDimensions,
-  FlatList,
   NativeSyntheticEvent,
   NativeScrollEvent,
   Animated,
   Alert,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -219,7 +219,7 @@ export const UserProfileScreen: React.FC<RootStackScreenProps<'UserProfile'>> = 
         {/* Photo Carousel */}
         {photos.length > 0 ? (
           <View style={[styles.carouselContainer, { height: PHOTO_HEIGHT }]}>
-            <FlatList
+            <FlashList
               data={photos.slice(0, 6)}
               keyExtractor={(item: any, index) => String(item?.id ?? `photo-${index}`)}
               horizontal

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, AppState } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, AppState } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useQuery } from '@tanstack/react-query';
@@ -156,7 +157,7 @@ export const WhoViewedScreen: React.FC<RootStackScreenProps<'WhoViewed'>> = ({ n
         <View style={{ width: 24 }} />
       </View>
 
-      <FlatList
+      <FlashList
         data={viewers}
         keyExtractor={(item, index) => item?.id || String(index)}
         contentContainerStyle={styles.list}

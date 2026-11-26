@@ -65,6 +65,8 @@ export const RootNavigator: React.FC = () => {
   React.useEffect(() => {
     if (isAuthenticated) {
       navigationRef.current?.navigate('Main');
+    } else {
+      navigationRef.current?.navigate('Auth');
     }
   }, [isAuthenticated]);
 

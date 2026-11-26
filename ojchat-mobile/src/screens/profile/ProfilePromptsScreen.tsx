@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -153,7 +154,7 @@ export default function ProfilePromptsScreen() {
           )}
         </View>
 
-        <FlatList
+        <FlashList
           data={prompts}
           keyExtractor={(item, index) => item?.id || String(index)}
           extraData={[prompts]}

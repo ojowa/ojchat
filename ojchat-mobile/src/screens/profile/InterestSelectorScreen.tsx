@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -82,7 +83,7 @@ export const InterestSelectorScreen: React.FC<{ navigation: any; route: any }> =
 
       {/* Category Tabs */}
       <View style={styles.tabsContainer}>
-        <FlatList
+        <FlashList
           data={allCategories}
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -103,7 +104,7 @@ export const InterestSelectorScreen: React.FC<{ navigation: any; route: any }> =
       </View>
 
       {/* Interests Grid */}
-      <FlatList
+      <FlashList
         data={filteredInterests}
         keyExtractor={(item, index) => item?.id || String(index)}
         contentContainerStyle={styles.list}

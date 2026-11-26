@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   SafeAreaView,
   RefreshControl,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../services/api/apiClient';
 import { ErrorState } from '../../components/common/ErrorState';
@@ -138,7 +138,7 @@ const NotificationsScreen: React.FC = ({ navigation }: any) => {
       {isError ? (
         <ErrorState message="Couldn't load notifications." onRetry={() => refetch()} />
       ) : (
-        <FlatList
+        <FlashList
           data={notifications}
           keyExtractor={(item, index) => item?.id || String(index)}
           extraData={[notifications]}

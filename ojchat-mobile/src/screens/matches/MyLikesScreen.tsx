@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useMyLikes } from '../../hooks/useMatch';
@@ -55,7 +56,7 @@ export const MyLikesScreen: React.FC<RootStackScreenProps<'MyLikes'>> = ({ navig
         <View style={{ width: 24 }} />
       </View>
 
-      <FlatList
+      <FlashList
         data={likes}
         keyExtractor={(item: any, index: number) =>
           item?.user?.id || item?.likedUserId || String(index)

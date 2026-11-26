@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  FlatList,
   Image,
   TouchableOpacity,
   RefreshControl,
@@ -15,6 +14,7 @@ import {
   Platform,
   PermissionsAndroid,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../services/api/apiClient';
@@ -552,7 +552,7 @@ const MomentsScreen: React.FC = () => {
         </>
       )}
 
-      <FlatList
+      <FlashList
         data={Array.isArray(selectedMoments) ? selectedMoments : []}
         keyExtractor={(item, index) => (item && item.id) || String(index)}
         extraData={[selectedMoments, activeTab, selectedUserId]}

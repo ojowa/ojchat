@@ -2,7 +2,6 @@ import React, { useRef, useCallback, useState, useLayoutEffect, useEffect, useMe
 import {
   View,
   StyleSheet,
-  FlatList,
   KeyboardAvoidingView,
   Platform,
   Text,
@@ -11,6 +10,7 @@ import {
   Image,
   Alert,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackScreenProps } from '../../navigation/types';
 import {
@@ -90,7 +90,7 @@ export const ConversationScreen: React.FC<RootStackScreenProps<'Conversation'>> 
   const deleteMessage = useDeleteMessage(conversationId);
   const reactToMessage = useReactToMessage(conversationId);
   const userId = useAppStore((s) => s.user?.id);
-  const flatListRef = useRef<FlatList>(null);
+  const flatListRef = useRef<FlashList>(null);
   const typingUsers = useTypingIndicator(conversationId);
   const [replyTo, setReplyTo] = useState<{ id: string; content: string } | null>(null);
   const [callEvents, setCallEvents] = useState<FeedItem[]>([]);
@@ -377,7 +377,7 @@ export const ConversationScreen: React.FC<RootStackScreenProps<'Conversation'>> 
       );
     }
     return (
-      <FlatList
+      <FlashList
         ref={flatListRef}
         data={feed}
         keyExtractor={keyExtractor}
