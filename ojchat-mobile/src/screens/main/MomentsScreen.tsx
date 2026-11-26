@@ -369,12 +369,20 @@ const MomentsScreen: React.FC = () => {
   }, [userList, selectedUserId]);
 
   const selectedMoments = React.useMemo(() => {
+    console.log('[MomentsScreen] computing selectedMoments:', {
+      selectedUserId,
+      hasGroupedByUser: !!groupedByUser,
+      groupedByUserKeys: groupedByUser ? Array.from(groupedByUser.keys()) : [],
+    });
     if (!selectedUserId) return [];
     const moments = groupedByUser.get(selectedUserId);
+    console.log('[MomentsScreen] groupedByUser.get(selectedUserId):', moments);
     if (!moments) return [];
-    return moments.slice().sort(
+    const sorted = moments.slice().sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
+    console.log('[MomentsScreen] selectedMoments result:', sorted.length, 'items');
+    return sorted;
   }, [groupedByUser, selectedUserId]);
 
   useEffect(() => {

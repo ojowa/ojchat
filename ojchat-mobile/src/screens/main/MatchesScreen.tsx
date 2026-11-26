@@ -61,6 +61,7 @@ export const MatchesScreen: React.FC<MainTabScreenProps<'Matches'>> = ({ navigat
   if (isLoading) return <LoadingSpinner />;
   const matches = data?.matches || [];
 
+  console.log('[MatchesScreen] matches data:', matches?.length, 'items');
   if (isError) {
     return (
       <SafeAreaView style={styles.safeArea}>

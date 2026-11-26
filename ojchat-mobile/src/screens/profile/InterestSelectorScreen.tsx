@@ -34,6 +34,7 @@ export const InterestSelectorScreen: React.FC<{ navigation: any; route: any }> =
       .then((res: any) => {
         const data = res?.data || res;
         setAllInterests(Array.isArray(data) ? data : data?.interests || []);
+        console.log('[InterestSelectorScreen] allInterests:', allInterests.length, 'items');
       })
       .catch((err) => {
         logger.warn('Failed to load interests', {
@@ -64,6 +65,7 @@ export const InterestSelectorScreen: React.FC<{ navigation: any; route: any }> =
     activeCategory === 'All'
       ? allInterests
       : allInterests.filter((i) => (i.category || 'Other') === activeCategory);
+  console.log('[InterestSelectorScreen] filteredInterests:', filteredInterests.length, 'items');
 
   return (
     <SafeAreaView style={styles.safeArea}>

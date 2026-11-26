@@ -24,6 +24,7 @@ export default function BlockListScreen() {
     queryKey: ['blockList'],
     queryFn: () => apiClient.get(ENDPOINTS.USERS.BLOCK_LIST).then((r) => r.data?.blockedUsers || []),
   });
+  console.log('[BlockListScreen] blockedUsers:', blockedUsers.length, 'items');
 
   const unblockMutation = useMutation({
     mutationFn: (userId: string) => apiClient.delete(ENDPOINTS.USERS.UNBLOCK(userId)),

@@ -41,6 +41,7 @@ export default function ProfilePromptsScreen() {
         apiClient.get(ENDPOINTS.USERS.PROMPTS),
       ]);
       setPrompts(allPromptsRes.data?.prompts ?? allPromptsRes.data ?? []);
+      console.log('[ProfilePromptsScreen] prompts:', prompts.length, 'items');
       const saved: UserPrompt[] = userPromptsRes.data?.prompts ?? userPromptsRes.data ?? [];
       setSelectedPrompts(saved);
     } catch {

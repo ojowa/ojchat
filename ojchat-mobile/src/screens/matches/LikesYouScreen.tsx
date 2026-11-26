@@ -120,6 +120,7 @@ const LikesYouScreen: React.FC<RootStackScreenProps<'LikesYou'>> = ({ navigation
   const likes = data?.likes || [];
   const totalCount = data?.total ?? 0;
   const isBlurred = data?.isBlurred ?? false;
+  console.log('[LikesYouScreen] likes:', likes.length, 'items');
 
   const getPrimaryPhoto = (photos: Photo[]): string | undefined => {
     const primary = photos?.find((p) => p.isPrimary);

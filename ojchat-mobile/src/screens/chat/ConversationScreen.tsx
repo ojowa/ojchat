@@ -236,7 +236,7 @@ export const ConversationScreen: React.FC<RootStackScreenProps<'Conversation'>> 
   const messages = data?.messages || [];
 
   const feed = useMemo<FeedItem[]>(() => {
-    return [...messages, ...callEvents].sort((a, b) => {
+    const result = [...messages, ...callEvents].sort((a, b) => {
       const aTime =
         'createdAt' in a
           ? new Date(a.createdAt).getTime()
@@ -251,6 +251,8 @@ export const ConversationScreen: React.FC<RootStackScreenProps<'Conversation'>> 
             : 0;
       return bTime - aTime;
     });
+    console.log('[ConversationScreen] feed:', result.length, 'items');
+    return result;
   }, [messages, callEvents]);
 
   const handleSend = useCallback(

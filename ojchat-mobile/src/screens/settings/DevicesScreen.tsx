@@ -23,6 +23,7 @@ export default function DevicesScreen() {
     queryKey: ['devices'],
     queryFn: () => apiClient.get(ENDPOINTS.AUTH.DEVICES).then((r) => r.data?.devices || []),
   });
+  console.log('[DevicesScreen] devices:', devices.length, 'items');
 
   const removeMutation = useMutation({
     mutationFn: (deviceId: string) => apiClient.delete(ENDPOINTS.AUTH.DELETE_DEVICE(deviceId)),

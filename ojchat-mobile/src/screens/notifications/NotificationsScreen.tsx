@@ -60,6 +60,7 @@ const NotificationsScreen: React.FC = ({ navigation }: any) => {
     queryKey: ['notifications'],
     queryFn: () => apiClient.get(ENDPOINTS.NOTIFICATIONS.LIST).then((r) => r.data),
   });
+  console.log('[NotificationsScreen] notifications:', notifications.length, 'items');
 
   const queryClient = useQueryClient();
   const markAllMutation = useMutation({

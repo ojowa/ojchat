@@ -52,6 +52,7 @@ export const WhoViewedScreen: React.FC<RootStackScreenProps<'WhoViewed'>> = ({ n
     avatar: v.user?.photos?.[0]?.url,
     viewedAt: v.viewedAt,
   }));
+  console.log('[WhoViewedScreen] viewers:', viewers.length, 'items', viewers);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {

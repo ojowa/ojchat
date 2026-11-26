@@ -36,6 +36,7 @@ export const MyLikesScreen: React.FC<RootStackScreenProps<'MyLikes'>> = ({ navig
 
   const likes = data?.likes || [];
   const totalCount = data?.meta?.total ?? likes.length;
+  console.log('[MyLikesScreen] likes:', likes.length, 'items');
 
   return (
     <SafeAreaView style={styles.safeArea}>

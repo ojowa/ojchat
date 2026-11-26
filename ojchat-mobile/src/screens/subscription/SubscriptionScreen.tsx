@@ -154,6 +154,7 @@ const SubscriptionScreen: React.FC = () => {
     if (!a.isFree && b.isFree) return 1;
     return (a.price || 0) - (b.price || 0);
   });
+  console.log('[SubscriptionScreen] plans:', plans.length, 'items');
 
   const handleSubscribe = () => {
     if (!selectedPlan) {

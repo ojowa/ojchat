@@ -98,6 +98,7 @@ const WalletScreen: React.FC = () => {
   const credits = walletData?.balance ?? 0;
   const hasActiveSubscription = !!walletData?.subscription?.active;
   const transactions = txnResponse?.transactions || [];
+  console.log('[WalletScreen] transactions:', transactions.length, 'items');
 
   return (
     <SafeAreaView style={styles.safeArea}>

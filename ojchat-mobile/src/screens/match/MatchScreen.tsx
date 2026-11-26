@@ -50,6 +50,7 @@ const MatchScreen: React.FC<RootStackScreenProps<'Match'>> = ({ navigation, rout
           const data = res?.data || res;
           setCompatibility(data);
           setIcebreakers(data?.icebreakers || []);
+          console.log('[MatchScreen] compatibility data:', data);
         })
         .catch((err) => {
           logger.warn('Failed to fetch compatibility', {
