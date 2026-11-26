@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAppStore } from '../store';
 import type { RootStackParamList } from './types';
@@ -58,7 +58,15 @@ export const RootNavigator: React.FC = () => {
     setMounted(true);
   }, []);
 
+  const navigation = useNavigation();
   const isAuthenticated = useAppStore((s) => s.isAuthenticated);
+
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      navigation.navigate('Main');
+    }
+  }, [isAuthenticated, navigation]);
+
   if (!mounted) return null;
   return (
     <NavigationContainer>
