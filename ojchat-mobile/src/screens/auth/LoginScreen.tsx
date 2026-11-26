@@ -33,13 +33,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     setServerError(null);
     try {
       const result = await login(identifier, password);
+      console.log('LOGIN_RESULT:', JSON.stringify(result, null, 2)); // DEBUG
       if (result?.requires2fa) {
         navigation.navigate('TwoFactorVerify');
       } else if (result?.user && result?.tokens) {
-        navigation.getParent()?.reset({
-          index: 0,
-          routes: [{ name: 'Main' }],
-        });
+        // RootNavigator switches to Main when isAuthenticated becomes true
       }
     } catch (err: any) {
       const msg =
