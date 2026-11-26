@@ -12,6 +12,7 @@ import { RequestLoggingInterceptor } from './gateway/interceptors/request-loggin
 import { TimeoutInterceptor } from './gateway/interceptors/timeout.interceptor';
 import { ResponseTransformInterceptor } from './gateway/interceptors/response-transform.interceptor';
 import { AuditLogInterceptor } from './gateway/interceptors/audit-log.interceptor';
+import { JwtAuthGuard } from './gateway/guards/jwt-auth.guard';
 import { EntitiesModule } from './entities.module';
 import { MonolithHealthModule } from './health/health.module';
 import {
@@ -84,6 +85,7 @@ import {
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
     RequestLoggingInterceptor,
     TimeoutInterceptor,
     ResponseTransformInterceptor,

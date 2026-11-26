@@ -57,7 +57,11 @@ export async function createApp(expressInstance?: Express): Promise<NestExpressA
   // In the microservice layout the gateway proxy copied the verified user id
   // onto an x-user-id header before forwarding. Here everything is in-process,
   // so do the same bridge so controllers keep reading @Headers('x-user-id').
+  // Zero-trust: strip any client-supplied value first, then expose the header
+  // only when AuthMiddleware verified a JWT (req.userId is set from the token,
+  // never from the request).
   app.use((req: any, _res: unknown, next: () => void) => {
+    delete req.headers['x-user-id'];
     if (req.userId) {
       req.headers['x-user-id'] = req.userId;
     }
