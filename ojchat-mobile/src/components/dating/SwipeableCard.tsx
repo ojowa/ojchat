@@ -80,7 +80,10 @@ export const SwipeableCard: React.FC<SwipeableCardProps> = ({
 
   const photos = profile?.photos || [];
   const primaryPhoto = photos.find((p) => p.isPrimary) || photos[0];
-  const age = profile?.dateOfBirth ? calculateAge(profile.dateOfBirth) : null;
+  // The backend sends a server-derived `age`; the exact date of birth is never
+  // exposed for other users, so it is only a fallback for local/cached data.
+  const age =
+    profile?.age ?? (profile?.dateOfBirth ? calculateAge(profile.dateOfBirth) : null);
 
   return (
     <View style={[styles.wrapper, style]}>

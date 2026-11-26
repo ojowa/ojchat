@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { User, Profile, Photo } from '@app/common/entities';
+import { redactProfile, redactUserSummary } from '@app/common/privacy';
 
 @Injectable()
 export class SearchService {
@@ -28,9 +29,10 @@ export class SearchService {
 
     return {
       users: users.map((u) => ({
-        id: u.id,
-        fullName: u.fullName,
-        profile: profileMap.get(u.id) || null,
+        // Privacy (C2): search is a bulk listing — strip exact coordinates,
+        // exact DOB, employer and school from the profile it returns.
+        ...redactUserSummary(u),
+        profile: profileMap.has(u.id) ? redactProfile(profileMap.get(u.id)!) : null,
       })),
       meta: { page, limit, hasMore: users.length === limit },
     };

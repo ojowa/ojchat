@@ -153,10 +153,16 @@ export const UserProfileScreen: React.FC<RootStackScreenProps<'UserProfile'>> = 
     );
   }
 
-  const p = profile;
-  const age = p.dateOfBirth ? calculateAge(p.dateOfBirth) : null;
-  const photos = p.photos || [];
+  // The public-profile endpoint returns the redacted profile under `profile`
+  // (and the photo list at the top level). Fall back to a flat shape so the
+  // screen keeps working against older/flat responses.
+  const raw = profile as any;
+  const p = (raw?.profile ?? raw ?? {}) as any;
+  const age =
+    p.age ?? raw?.age ?? (p.dateOfBirth ? calculateAge(p.dateOfBirth) : null);
+  const photos = raw?.photos || p.photos || [];
   const interests = p.interests || [];
+  const displayName = p.firstName || raw?.fullName || 'Profile';
   const PHOTO_HEIGHT = screenHeight * 0.55;
 
   return (
@@ -166,7 +172,7 @@ export const UserProfileScreen: React.FC<RootStackScreenProps<'UserProfile'>> = 
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{p.firstName || 'Profile'}</Text>
+        <Text style={styles.headerTitle}>{displayName}</Text>
         {isMatched ? (
           <View style={styles.headerActions}>
             <TouchableOpacity style={styles.headerIcon} onPress={handleChatPress}>
@@ -180,7 +186,7 @@ export const UserProfileScreen: React.FC<RootStackScreenProps<'UserProfile'>> = 
                   navigation.navigate('ActiveVoiceCall', {
                     conversationId: convId,
                     callerId: userId,
-                    callerName: p.firstName,
+                    callerName: displayName,
                     callType: 'voice',
                   });
               }}
@@ -195,7 +201,7 @@ export const UserProfileScreen: React.FC<RootStackScreenProps<'UserProfile'>> = 
                   navigation.navigate('ActiveVideoCall', {
                     conversationId: convId,
                     callerId: userId,
-                    callerName: p.firstName,
+                    callerName: displayName,
                     callType: 'video',
                   });
               }}
@@ -242,7 +248,7 @@ export const UserProfileScreen: React.FC<RootStackScreenProps<'UserProfile'>> = 
             <View style={[styles.photoOverlayInfo, { bottom: PHOTO_HEIGHT * 0.15 }]}>
               <View style={styles.nameRow}>
                 <Text style={styles.photoName}>
-                  {p.firstName}
+                  {p.firstName || displayName}
                   {p.lastName ? ` ${p.lastName}` : ''}
                   {age ? `, ${age}` : ''}
                 </Text>

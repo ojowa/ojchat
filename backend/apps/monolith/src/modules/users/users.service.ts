@@ -15,7 +15,9 @@ import {
   VerificationRequest,
   DailyStreak,
   Interest,
+  ProfileInterest,
 } from '@app/common/entities';
+import { calculateAge, redactProfile } from '@app/common/privacy';
 
 @Injectable()
 export class UsersService {
@@ -33,6 +35,8 @@ export class UsersService {
     private verificationRepo: Repository<VerificationRequest>,
     @InjectRepository(DailyStreak) private streakRepo: Repository<DailyStreak>,
     @InjectRepository(Interest) private interestRepo: Repository<Interest>,
+    @InjectRepository(ProfileInterest)
+    private profileInterestRepo: Repository<ProfileInterest>,
   ) {}
 
   async getMe(userId: string) {
@@ -121,14 +125,41 @@ export class UsersService {
     const photos = profile
       ? await this.photoRepo.find({ where: { profileId: profile.id }, order: { order: 'ASC' } })
       : [];
+    const interests = profile ? await this.loadProfileInterests(profile.id) : [];
+
+    // Privacy (C2): exact coordinates and the exact date of birth never leave
+    // the server. Employment/school are kept here because this is a single,
+    // deliberate profile view (the feed strips them).
     return {
       id: user.id,
       fullName: user.fullName,
-      dateOfBirth: user.dateOfBirth,
+      age: calculateAge(user.dateOfBirth),
       gender: user.gender,
-      profile,
+      profile: profile
+        ? redactProfile(profile, { photos, interests, includeEmployment: true })
+        : null,
       photos,
     };
+  }
+
+  private async loadProfileInterests(
+    profileId: string,
+  ): Promise<Array<{ id: string; name: string; category?: string }>> {
+    const profileInterests = await this.profileInterestRepo.find({
+      where: { profileId },
+      relations: ['interest'],
+    });
+    return profileInterests.flatMap((pi) =>
+      pi.interest
+        ? [
+            {
+              id: pi.interest.id,
+              name: pi.interest.name,
+              category: pi.interest.category ?? undefined,
+            },
+          ]
+        : [],
+    );
   }
 
   async updatePreferences(userId: string, data: any) {

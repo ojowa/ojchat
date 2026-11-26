@@ -23,6 +23,7 @@ import {
   Subscription,
   Notification,
 } from '@app/common/entities';
+import { redactProfile, redactUserSummary } from '@app/common/privacy';
 import { MatchmakingEngine } from './ai/matchmaking.engine';
 import { CompatibilityEngine } from './ai/compatibility.engine';
 import { ScamDetector } from './ai/scam.detector';
@@ -272,13 +273,15 @@ export class MatchingService {
         const profilePhotos = profile ? photoMap.get(profile.id) || [] : [];
         const profileInterestsList = profile ? interestMap.get(profile.id) || [] : [];
         return {
-          user: { id: u.id, fullName: u.fullName, dateOfBirth: u.dateOfBirth, gender: u.gender },
+          // Privacy (C2): the client gets age, never the exact date of birth,
+          // and never the raw profile entity (which carries exact GPS
+          // coordinates, employer and school).
+          user: redactUserSummary(u),
           profile: profile
-            ? {
-                ...profile,
+            ? redactProfile(profile, {
                 photos: profilePhotos,
                 interests: profileInterestsList,
-              }
+              })
             : null,
         };
       });

@@ -3,7 +3,5 @@ module.exports = {
   testEnvironment: 'node',
   roots: ['<rootDir>/apps', '<rootDir>/libs'],
   testMatch: ['**/*.spec.ts'],
-  moduleNameMapper: {
-    '^@app/(.*)$': '<rootDir>/libs/$1/src',
-  },
+  resolver: '<rootDir>/jest.resolver.js',
 };

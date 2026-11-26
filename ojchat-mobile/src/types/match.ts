@@ -1,11 +1,15 @@
-import { User } from './auth';
-
 export interface Profile {
   id: string;
   userId: string;
   firstName: string;
   lastName?: string;
   bio?: string;
+  /**
+   * Server-derived age in whole years. The backend never sends the exact date
+   * of birth for other users, so age is the only age signal available here.
+   */
+  age?: number | null;
+  /** Only present for the signed-in user's own profile / local cache. */
   dateOfBirth?: string;
   gender?: string;
   jobTitle?: string;
@@ -20,8 +24,16 @@ export interface Profile {
   interests: Interest[];
   latitude?: number;
   longitude?: number;
-  createdAt: string;
+  createdAt?: string;
   updatedAt?: string;
+}
+
+/** Minimal user projection returned with feed candidates. */
+export interface FeedUser {
+  id: string;
+  fullName: string;
+  age?: number | null;
+  gender?: string | null;
 }
 
 export interface Photo {
@@ -71,7 +83,7 @@ export interface CompatibilityData {
 }
 
 export interface MatchFeedItem {
-  user: User;
+  user: FeedUser;
   profile: Profile | null;
   compatibility?: CompatibilityData;
   compatibilityScore?: number;

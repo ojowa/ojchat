@@ -253,17 +253,34 @@ Make `@OnEvent` handlers run via an outbox/queue (BullMQ + Redis, or at minimum 
 
 ## 5. Step-by-Step Remediation Plan
 
-| # | Priority | Action | Effort |
-|---|---|---|---|
-| 1 | 🔴 **P0 — today** | Fix auth middleware: reject unauthenticated non-public routes + strip client `x-user-id` (§4.1). Add `APP_GUARD`. | <1h |
-| 2 | 🔴 **P0 — today** | Stop leaking `latitude`/`longitude`/exact DOB in `getFeed` + AI feed (§4.7) | 1h |
-| 3 | 🔴 **P0 — this week** | Add block/existence/target-visibility checks to `like/pass/superlike` (C5) | 2h |
-| 4 | 🔴 **P0 — this week** | Canonical match upsert + partial unique index + transaction (§4.2); atomic daily counters (§4.3) | 3h |
-| 5 | 🟠 **P1** | PostGIS migration + `ST_DWithin` distance filter in `getFeed` — fixes C3 + B5 together (§4.4). Verify/enable `postgis` extension first (passport query already assumes it) | 4h |
-| 6 | 🟠 **P1** | Replace in-memory exclusion arrays & `IN(allIds)` with `NOT EXISTS`/`EXISTS` anti-joins (§4.5); add missing indexes | 4h |
-| 7 | 🟠 **P1** | Redis deck cache with stale-queue invalidation on block/delete/match (§4.8) | 2–3d |
-| 8 | 🟡 **P2** | Move compatibility scoring + Elo off the request path; async side effects via queue (§4.9) | 2d |
-| 9 | 🟡 **P2** | Two-way preference filtering (§4.6); DTO validation on all mutating endpoints (S2) | 2d |
-| 10 | 🟡 **P3** | Cold-start newbie boost + radius fallback; throttle/lock Swagger `/docs` in production | 2d |
+| # | Status | Priority | Action | Effort |
+|---|---|---|---|---|
+| 1 | ✅ **DONE** (`e5b482e`) | 🔴 **P0 — today** | Fix auth middleware: reject unauthenticated non-public routes + strip client `x-user-id` (§4.1). Add `APP_GUARD`. | <1h |
+| 2 | ✅ **DONE** | 🔴 **P0 — today** | Stop leaking `latitude`/`longitude`/exact DOB in `getFeed` + AI feed (§4.7) | 1h |
+| 3 | ⬜ TODO | 🔴 **P0 — this week** | Add block/existence/target-visibility checks to `like/pass/superlike` (C5) | 2h |
+| 4 | ⬜ TODO | 🔴 **P0 — this week** | Canonical match upsert + partial unique index + transaction (§4.2); atomic daily counters (§4.3) | 3h |
+| 5 | ⬜ TODO | 🟠 **P1** | PostGIS migration + `ST_DWithin` distance filter in `getFeed` — fixes C3 + B5 together (§4.4). Verify/enable `postgis` extension first (passport query already assumes it) | 4h |
+| 6 | ⬜ TODO | 🟠 **P1** | Replace in-memory exclusion arrays & `IN(allIds)` with `NOT EXISTS`/`EXISTS` anti-joins (§4.5); add missing indexes | 4h |
+| 7 | ⬜ TODO | 🟠 **P1** | Redis deck cache with stale-queue invalidation on block/delete/match (§4.8) | 2–3d |
+| 8 | ⬜ TODO | 🟡 **P2** | Move compatibility scoring + Elo off the request path; async side effects via queue (§4.9) | 2d |
+| 9 | ⬜ TODO | 🟡 **P2** | Two-way preference filtering (§4.6); DTO validation on all mutating endpoints (S2) | 2d |
+| 10 | ⬜ TODO | 🟡 **P3** | Cold-start newbie boost + radius fallback; throttle/lock Swagger `/docs` in production | 2d |
+
+### Remediation log
+
+**Fix #1 — Auth bypass (C1)** · commit `e5b482e`
+- `gateway/middleware/auth.middleware.ts` rewritten: client `x-user-id` is **always** stripped; requests without a valid token are rejected on every non-public path; admin tokens (`ADMIN_JWT_SECRET`) pass through with an `isAdminToken` flag because the admin controller self-authenticates per route.
+- New `gateway/guards/jwt-auth.guard.ts` registered as `APP_GUARD` (defense in depth — no `/v1` route can execute without a verified identity).
+- `main.ts` bridge now strips the header before conditionally re-setting it from the verified token.
+- 12 new regression tests (`auth.middleware.spec.ts`).
+
+**Fix #2 — Privacy redaction (C2)** · commit `e5b482e`+1
+- New single source of truth for profile serialization: `libs/common/src/privacy/profile-redactor.ts` (`redactProfile`, `redactUserSummary`, `calculateAge`, `distanceBucket`).
+- `getFeed` no longer spreads the raw `Profile` entity — it now emits a redacted profile (no `latitude`, `longitude`, exact `dateOfBirth`, `company`, `school`) plus a server-derived `age`.
+- `GET /users/:id` (public profile) is redacted the same way (exact GPS + DOB removed; `age` added; employment kept for this single deliberate view), and now returns the profile's interests.
+- `GET /search/users` (bulk listing) is redacted with the strict policy (employment stripped).
+- Mobile updated: `SwipeableCard` and `UserProfileScreen` read the server-derived `age`; `types/match.ts` gained `age` and a `FeedUser` projection.
+- Test infra fix: Jest could not resolve `@app/common/*` (module `moduleNameMapper` does not support regex capture groups) — replaced with `jest.resolver.js` mirroring the tsconfig path aliases.
+- 14 new tests (`profile-redactor.spec.ts`, `users.service.spec.ts`, `search.service.spec.ts`).
 
 **Bottom line:** fix #1 before anything else — as it stands, any anonymous caller can act as any user. Then privacy redaction (#2), then the match/limit races (#4), then the geospatial + query rework (#5–6) before scaling past a few thousand users. The scoring/caching layers (#7–8) are what turn this from "correct" into "fast at 10k concurrent swipers."
