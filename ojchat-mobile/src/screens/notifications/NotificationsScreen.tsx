@@ -145,7 +145,7 @@ const NotificationsScreen: React.FC = ({ navigation }: any) => {
           renderItem={renderNotification}
           ListHeaderComponent={renderHeader}
           ListEmptyComponent={renderEmpty}
-          contentContainerStyle={notifications.length === 0 ? styles.emptyList : styles.listContent}
+          contentContainerStyle={styles.listContent}
           ItemSeparatorComponent={NotificationSeparator}
           refreshControl={
             <RefreshControl
@@ -274,8 +274,5 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
     textAlign: 'center',
-  },
-  emptyList: {
-    flexGrow: 1,
   },
 });

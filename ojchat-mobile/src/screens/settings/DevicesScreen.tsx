@@ -58,7 +58,7 @@ export default function DevicesScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-      <FlashList
+      <FlashList<Device>
         data={devices}
         keyExtractor={(item, index) => item?.deviceId || String(index)}
         renderItem={({ item }) => (

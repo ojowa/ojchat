@@ -325,7 +325,6 @@ const LikesYouScreen: React.FC<RootStackScreenProps<'LikesYou'>> = ({ navigation
           extraData={[likes]}
           ListHeaderComponent={renderHeader}
           contentContainerStyle={styles.list}
-          columnWrapperStyle={styles.row}
           renderItem={renderItem}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -440,14 +439,10 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingBottom: spacing.xxl,
-  },
-  row: {
-    justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
   },
   card: {
-    flex: 1,
-    maxWidth: '48%',
+    marginHorizontal: spacing.xs,
     marginBottom: spacing.md,
     backgroundColor: colors.white,
     borderRadius: borderRadius.card,

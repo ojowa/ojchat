@@ -20,6 +20,7 @@ import { DOBPicker } from '../../components/common/DOBPicker';
 import { Input } from '../../components/common/Input';
 import { CONFIG_URLS } from '../../constants/config';
 import { useAuth } from '../../hooks/useAuth';
+import { authApi } from '../../services/api/authApi';
 import { borderRadius } from '../../theme/borderRadius';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
@@ -131,13 +132,28 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
 
     setServerError(null);
     try {
-      await register({
+      const result: any = await register({
         email: email.trim(),
         password,
         fullName: fullName.trim(),
         dateOfBirth,
         gender: gender.toLowerCase().replace(/[- ]/g, '_'),
       });
+
+      // Registration requires email verification — send the OTP and route to
+      // the verification screen instead of dropping the user into the app.
+      if (result?.requiresEmailVerification) {
+        const identifier = result.email || email.trim();
+        try {
+          await authApi.sendOtp('email', 'registration', identifier);
+        } catch {
+          /* the OTP screen has a Resend button to retry */
+        }
+        navigation.navigate('OTPVerification', {
+          identifier,
+          purpose: 'registration',
+        });
+      }
     } catch (err: any) {
       const msg =
         err?.response?.data?.error?.message ||

@@ -90,7 +90,7 @@ export const ConversationScreen: React.FC<RootStackScreenProps<'Conversation'>> 
   const deleteMessage = useDeleteMessage(conversationId);
   const reactToMessage = useReactToMessage(conversationId);
   const userId = useAppStore((s) => s.user?.id);
-  const flatListRef = useRef<FlashList>(null);
+  const flatListRef = useRef<FlashList<FeedItem>>(null);
   const typingUsers = useTypingIndicator(conversationId);
   const [replyTo, setReplyTo] = useState<{ id: string; content: string } | null>(null);
   const [callEvents, setCallEvents] = useState<FeedItem[]>([]);

@@ -21,6 +21,7 @@ import {
   BiometricCredential,
 } from '@app/common/entities';
 import { v4 as uuid } from 'uuid';
+import { EmailService } from './email.service';
 
 @Injectable()
 export class AuthService {
@@ -31,6 +32,7 @@ export class AuthService {
     @InjectRepository(BiometricCredential) private biometricRepo: Repository<BiometricCredential>,
     private jwtService: JwtService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly emailService: EmailService,
   ) {}
 
   async register(data: any) {
@@ -195,8 +197,23 @@ export class AuthService {
     const otpData: any = { code, purpose, expiresAt, attempts: 0, maxAttempts: 3 };
     if (channel === 'email') otpData.email = identifier;
     else otpData.phone = identifier;
+
+    // Link the OTP to the user so verification can activate the account and
+    // issue tokens. Without this, verifyOtp() has no user to act on.
+    const user = channel === 'email'
+      ? await this.userRepo.findOne({ where: { email: identifier } })
+      : await this.userRepo.findOne({ where: { phone: identifier } });
+    if (user) otpData.userId = user.id;
+
     const otp = this.otpRepo.create(otpData);
     await this.otpRepo.save(otp);
+
+    // Dispatch the email (best-effort — never fails the request, since the OTP
+    // is already stored and the user can hit "Resend").
+    if (channel === 'email') {
+      await this.emailService.sendOtpEmail({ to: identifier, code, purpose });
+    }
+
     const masked = identifier.includes('@')
       ? identifier.replace(/(.{2})(.*)(@.*)/, '$1***$3')
       : identifier.replace(/(.{3})(.*)(.{2})/, '$1***$3');
@@ -228,7 +245,14 @@ export class AuthService {
         this.eventEmitter.emit('user.phone_verified', { userId: user.id, phone: user.phone });
       }
       const tokens = await this.generateTokens(user);
-      return { verified: true, purpose, userId: user.id, tokens: { ...tokens, expiresIn: 900 } };
+      const fresh = await this.userRepo.findOne({ where: { id: user.id } });
+      return {
+        verified: true,
+        purpose,
+        userId: user.id,
+        user: this.sanitizeUser(fresh ?? user),
+        tokens: { ...tokens, expiresIn: 900 },
+      };
     }
     return { verified: true, purpose };
   }

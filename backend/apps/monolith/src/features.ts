@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 // auth
 import { AuthController } from './modules/auth/auth.controller';
 import { AuthService } from './modules/auth/auth.service';
+import { EmailService } from './modules/auth/email.service';
 
 // users
 import { UsersController } from './modules/users/users.controller';
@@ -70,7 +71,8 @@ import { AdminService } from './modules/admin/admin.service';
 
 @Module({
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthService, EmailService],
+  exports: [EmailService],
 })
 export class AuthFeatureModule {}
 

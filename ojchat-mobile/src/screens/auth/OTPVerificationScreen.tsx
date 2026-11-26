@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/common/Button';
 import { authApi } from '../../services/api/authApi';
+import { useAppStore } from '../../store';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing } from '../../theme/spacing';
@@ -17,19 +18,54 @@ export const OTPVerificationScreen: React.FC<OTPScreenProps> = ({ route, navigat
   const { identifier, purpose } = route.params;
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  const setUser = useAppStore((s) => s.setUser);
+  const setTokens = useAppStore((s) => s.setTokens);
+  const setAuthenticated = useAppStore((s) => s.setAuthenticated);
 
   const handleVerify = async () => {
     const code = otp.join('');
     if (code.length !== 6) return;
     setLoading(true);
+    setError('');
+    setNotice('');
     try {
-      const response = await authApi.verifyOtp(identifier, code, purpose);
-      if (response.data.verified) navigation.replace('Main');
+      // apiClient unwraps { success, data }, so this is the inner payload.
+      const res: any = await authApi.verifyOtp(identifier, code, purpose);
+      if (res?.verified) {
+        if (res.user && res.tokens?.accessToken) {
+          setUser(res.user);
+          setTokens(res.tokens.accessToken, res.tokens.refreshToken);
+          // RootNavigator navigates to 'Main' when isAuthenticated flips true.
+          setAuthenticated(true);
+        } else {
+          setNotice('Verified! Please sign in to continue.');
+          navigation.replace('Login');
+        }
+      } else {
+        setError('Verification failed. Please try again.');
+      }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Verification failed');
+      setError(err.response?.data?.error?.message || err.response?.data?.message || 'Verification failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setResending(true);
+    setError('');
+    setNotice('');
+    try {
+      await authApi.sendOtp('email', purpose, identifier);
+      setNotice('A new code has been sent to your email.');
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || err.response?.data?.message || 'Could not resend code');
+    } finally {
+      setResending(false);
     }
   };
 
@@ -48,6 +84,7 @@ export const OTPVerificationScreen: React.FC<OTPScreenProps> = ({ route, navigat
                 const newOtp = [...otp];
                 newOtp[index] = text.slice(-1);
                 setOtp(newOtp);
+                setError('');
               }}
               keyboardType="number-pad"
               maxLength={1}
@@ -55,12 +92,19 @@ export const OTPVerificationScreen: React.FC<OTPScreenProps> = ({ route, navigat
             />
           ))}
         </View>
-        {error && <Text style={styles.error}>{error}</Text>}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {notice ? <Text style={styles.notice}>{notice}</Text> : null}
         <Button title="Verify" onPress={handleVerify} loading={loading} />
         <Button
-          title="Resend Code"
+          title={resending ? 'Sending…' : 'Resend Code'}
           variant="ghost"
-          onPress={() => authApi.sendOtp('email', purpose, identifier)}
+          onPress={handleResend}
+          disabled={resending}
+        />
+        <Button
+          title="Back"
+          variant="ghost"
+          onPress={() => navigation.goBack()}
         />
       </View>
     </SafeAreaView>
@@ -101,6 +145,12 @@ const styles = StyleSheet.create({
   error: {
     ...typography.caption,
     color: colors.error,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  notice: {
+    ...typography.caption,
+    color: colors.success,
     textAlign: 'center',
     marginBottom: spacing.md,
   },

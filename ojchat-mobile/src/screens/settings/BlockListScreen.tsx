@@ -61,7 +61,7 @@ export default function BlockListScreen() {
           <Text style={styles.emptySubtitle}>You haven't blocked anyone yet.</Text>
         </View>
       ) : (
-        <FlashList
+        <FlashList<BlockedUser>
           data={blockedUsers}
           keyExtractor={(item, index) => item?.id || String(index)}
           renderItem={({ item }) => (

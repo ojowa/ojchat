@@ -88,18 +88,24 @@ export function useAuth() {
     try {
       const response = await authApi.register(data);
       const d = response as any;
-      if (d?.user && d?.tokens) {
-        setUser(d.user);
-        setTokens(d.tokens.accessToken, d.tokens.refreshToken);
-        setAuthenticated(true);
-        return d;
+      const result = d?.success && d?.data ? d.data : d;
+
+      // Email verification required — do NOT authenticate yet. The user must
+      // enter the OTP first; tokens are issued after verifyOtp() succeeds.
+      if (result?.requiresEmailVerification) {
+        return {
+          requiresEmailVerification: true as const,
+          email: result.user?.email ?? data.email,
+        };
       }
-      if (d?.success && d?.data) {
-        setUser(d.data.user);
-        setTokens(d.data.tokens.accessToken, d.data.tokens.refreshToken);
+
+      if (result?.user && result?.tokens) {
+        setUser(result.user);
+        setTokens(result.tokens.accessToken, result.tokens.refreshToken);
         setAuthenticated(true);
-        return d.data;
+        return result;
       }
+      return result;
     } catch (err: any) {
       setError(
         err.response?.data?.error?.message ||
