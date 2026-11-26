@@ -15,7 +15,7 @@ export class UserPreference {
   @Column({ default: 50 }) maxDistanceKm: number;
   @Column({ default: 'opposite' }) showMe: string;
   @Column({ default: false }) showVerifiedOnly: boolean;
-  @Column({ default: true }) showProfilesWithPhotosOnly: boolean;
+  @Column({ default: false }) showProfilesWithPhotosOnly: boolean;
   @Column({ default: false }) globalDiscovery: boolean;
   @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true }) passportLatitude: number;
   @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true }) passportLongitude: number;

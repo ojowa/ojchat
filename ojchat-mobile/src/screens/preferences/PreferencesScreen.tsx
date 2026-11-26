@@ -28,7 +28,7 @@ export default function PreferencesScreen({ navigation }: any) {
   const [maxDistance, setMaxDistance] = useState(50);
   const [relationshipGoal, setRelationshipGoal] = useState('any');
   const [showVerifiedOnly, setShowVerifiedOnly] = useState(false);
-  const [showPhotosOnly, setShowPhotosOnly] = useState(true);
+  const [showPhotosOnly, setShowPhotosOnly] = useState(false);
   const [loading, setLoading] = useState(false);
   const appState = useRef(AppState.currentState);
   const { data: planInfo, refetch: refetchPlan } = usePlanInfo();
