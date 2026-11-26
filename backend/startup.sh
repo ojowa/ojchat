@@ -17,7 +17,10 @@ fi
 
 # Run database migrations first
 echo "Running database migrations..."
-npm run migration:run || echo "Migration failed or already applied, continuing..."
+if ! npm run migration:run; then
+  echo "ERROR: Database migrations failed; refusing to start with an outdated schema."
+  exit 1
+fi
 
 # Single process: no child processes, no internal ports (3001-3012).
 exec node dist/apps/monolith/src/main.js

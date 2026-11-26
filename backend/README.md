@@ -78,7 +78,7 @@ npm run start:prod        # run the built app
 | `npm run lint` | ESLint (all apps + libs) with `--fix` |
 | `npm run package:cpanel` | Assemble a cPanel-ready bundle in `out/cpanel/` (`--zip` to archive) |
 | `npm test` / `test:watch` / `test:cov` | Jest unit tests |
-| `npm run migration:run` | Apply pending TypeORM migrations |
+| `npm run migration:run` | Apply pending TypeORM migrations (required before starting against an unmigrated database) |
 | `npm run migration:revert` | Revert last migration |
 | `npm run migration:show` | List migrations and their status |
 
@@ -108,7 +108,8 @@ Local development uses `.env` (loaded via `dotenv` in the monolith entrypoint).
   user id onto an `x-user-id` header for the controllers.
 - **Deploy (Azure):** `.github/workflows/main_ojchatapi.yml` builds `backend/**`
   on pushes to `main` and deploys to Azure Web App `ojchatapi`, starting via
-  `backend/startup.sh` (runs migrations, then the monolith).
+  `backend/startup.sh` (runs migrations before the monolith and stops if they
+  fail).
 - **Deploy (cPanel):** `npm run package:cpanel` builds `out/cpanel/` — upload it
   to a cPanel Node.js app with `app.js` as the startup file (full checklist in
   the generated `DEPLOY.txt`). Database is external (Neon); no cPanel
@@ -117,7 +118,9 @@ Local development uses `.env` (loaded via `dotenv` in the monolith entrypoint).
 - **Deploy (Vercel):** set the Vercel project root to `backend/`. `vercel.json`
   builds the Nest app and routes every request to `api/index.js`, which runs the
   compiled app as one serverless function. Configure `DATABASE_URL`,
-  `JWT_SECRET`, `ADMIN_JWT_SECRET`, and any feature env vars in Vercel. Use the
+  `JWT_SECRET`, `ADMIN_JWT_SECRET`, and any feature env vars in Vercel. Run
+  `npm run migration:run` against the same database before deploying schema
+  changes; Vercel does not use `startup.sh`. Use the
   Neon **pooled** connection string. Vercel is serverless, so Socket.IO
   (calls), in-process `@Cron` jobs, and local `uploads/` are not durable; use
   external storage and an external scheduler/worker for those features.
