@@ -418,7 +418,7 @@ export const ConversationScreen: React.FC<RootStackScreenProps<'Conversation'>> 
   );
 };
 
-const keyExtractor = (item: FeedItem) => item.id;
+const keyExtractor = (item: FeedItem, index: number) => item?.id || String(index);
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },

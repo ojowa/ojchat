@@ -319,8 +319,9 @@ const LikesYouScreen: React.FC<RootStackScreenProps<'LikesYou'>> = ({ navigation
       ) : (
         <FlatList
           data={likes}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => item?.id || String(index)}
           numColumns={2}
+          extraData={[likes]}
           ListHeaderComponent={renderHeader}
           contentContainerStyle={styles.list}
           columnWrapperStyle={styles.row}

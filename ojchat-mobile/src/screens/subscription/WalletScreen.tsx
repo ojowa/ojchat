@@ -153,8 +153,8 @@ const WalletScreen: React.FC = () => {
           <Text style={styles.emptyHistory}>No transactions yet.</Text>
         ) : (
           <View style={styles.transactionSection}>
-            {transactions.map((transaction) => (
-              <TransactionItem key={transaction.id} transaction={transaction} currency={currency} />
+            {transactions.map((transaction, index) => (
+              <TransactionItem key={transaction.id || String(index)} transaction={transaction} currency={currency} />
             ))}
           </View>
         )}

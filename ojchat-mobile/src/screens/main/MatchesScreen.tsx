@@ -101,7 +101,8 @@ export const MatchesScreen: React.FC<MainTabScreenProps<'Matches'>> = ({ navigat
         ) : (
           <FlatList
             data={matches}
-            keyExtractor={(item: Match) => item.id}
+            keyExtractor={(item: Match, index: number) => item?.id || String(index)}
+            extraData={[matches]}
             contentContainerStyle={styles.list}
             renderItem={({ item }) => {
               const otherId = item.otherUser?.id;

@@ -157,7 +157,7 @@ export const WhoViewedScreen: React.FC<RootStackScreenProps<'WhoViewed'>> = ({ n
 
       <FlatList
         data={viewers}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => item?.id || String(index)}
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -177,11 +177,11 @@ export const WhoViewedScreen: React.FC<RootStackScreenProps<'WhoViewed'>> = ({ n
               <Image source={{ uri: item.avatar }} style={styles.avatar} />
             ) : (
               <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                <Text style={styles.avatarText}>{item.fullName.charAt(0)}</Text>
+                <Text style={styles.avatarText}>{item.fullName?.charAt(0) || '?'}</Text>
               </View>
             )}
             <View style={styles.viewerInfo}>
-              <Text style={styles.viewerName}>{item.fullName}</Text>
+              <Text style={styles.viewerName}>{item.fullName || 'Unknown'}</Text>
               <Text style={styles.viewerTime}>Viewed your profile</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={colors.gray400} />

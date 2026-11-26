@@ -57,8 +57,9 @@ export const MyLikesScreen: React.FC<RootStackScreenProps<'MyLikes'>> = ({ navig
       <FlatList
         data={likes}
         keyExtractor={(item: any, index: number) =>
-          item.user?.id || item.likedUserId || `like-${index}`
+          item?.user?.id || item?.likedUserId || String(index)
         }
+        extraData={likes}
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           <View style={styles.empty}>

@@ -122,7 +122,7 @@ const NotificationsScreen: React.FC = ({ navigation }: any) => {
     </TouchableOpacity>
   );
 
-  const unreadCount = notifications.filter((n: Notification) => !n.read).length;
+  const unreadCount = notifications.filter((n: Notification) => n && !n.read).length;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -139,7 +139,8 @@ const NotificationsScreen: React.FC = ({ navigation }: any) => {
       ) : (
         <FlatList
           data={notifications}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => item?.id || String(index)}
+          extraData={[notifications]}
           renderItem={renderNotification}
           ListHeaderComponent={renderHeader}
           ListEmptyComponent={renderEmpty}

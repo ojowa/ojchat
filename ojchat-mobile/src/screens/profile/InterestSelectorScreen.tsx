@@ -103,7 +103,7 @@ export const InterestSelectorScreen: React.FC<{ navigation: any; route: any }> =
       {/* Interests Grid */}
       <FlatList
         data={filteredInterests}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => item?.id || String(index)}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => {

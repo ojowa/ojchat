@@ -61,12 +61,12 @@ export default function BlockListScreen() {
       ) : (
         <FlatList
           data={blockedUsers}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => item?.id || String(index)}
           renderItem={({ item }) => (
             <View style={styles.userRow}>
               <Avatar uri={undefined} size={44} />
               <Text style={styles.userName} numberOfLines={1}>
-                User {item.blockedId.slice(0, 8)}
+                User {item.blockedId?.slice(0, 8) || 'Unknown'}
               </Text>
               <Button
                 title="Unblock"

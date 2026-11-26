@@ -154,7 +154,8 @@ export default function ProfilePromptsScreen() {
 
         <FlatList
           data={prompts}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => item?.id || String(index)}
+          extraData={[prompts]}
           renderItem={renderPrompt}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}

@@ -58,7 +58,7 @@ export default function DevicesScreen() {
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <FlatList
         data={devices}
-        keyExtractor={(item) => item.deviceId}
+        keyExtractor={(item, index) => item?.deviceId || String(index)}
         renderItem={({ item }) => (
           <View style={styles.deviceRow}>
             <View style={styles.deviceInfo}>

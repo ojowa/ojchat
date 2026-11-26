@@ -229,9 +229,9 @@ const SubscriptionScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {sortedPlans.map((plan) => (
+          {sortedPlans.map((plan, index) => (
             <PlanCard
-              key={plan.planId || plan.name}
+              key={plan.planId || plan.name || String(index)}
               plan={plan}
               isYearly={isYearly}
               isSelected={selectedPlan === plan.planId}
