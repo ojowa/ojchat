@@ -9,9 +9,13 @@ module.exports = {
     // private *methods* (#foo()), which need their own transform.
     ['@babel/plugin-transform-private-methods', { loose: true }],
     ['@babel/plugin-transform-private-property-in-object', { loose: true }],
-    ['babel-plugin-module-resolver', {
-      root: ['./src'],
-      extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
-    }],
+    [
+      'babel-plugin-module-resolver',
+      {
+        root: ['./src'],
+        extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
+      },
+    ],
+    'react-native-reanimated/plugin',
   ],
 };

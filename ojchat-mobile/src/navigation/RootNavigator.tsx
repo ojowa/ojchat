@@ -64,7 +64,6 @@ export const RootNavigator: React.FC = () => {
     <NavigationContainer>
       {isAuthenticated && <IncomingCallsListener />}
       <Stack.Navigator
-        key={isAuthenticated ? 'authenticated' : 'unauthenticated'}
         screenOptions={{ headerShown: false }}
         initialRouteName={isAuthenticated ? 'Main' : 'Auth'}
       >

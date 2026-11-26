@@ -4,6 +4,7 @@ import { API_CONFIG } from '../../constants/api';
 import { resolveApiUrl } from '../../lib/network';
 import { ENDPOINTS } from '../../constants/endpoints';
 import { logger } from '../../utils/logger';
+import { parseAuthTokenResponse } from './authTokenResponse';
 
 let resolvedBaseURL: string | null = null;
 
@@ -47,14 +48,13 @@ async function performRefresh(): Promise<string> {
       const response = await axios.post(`${baseURL}${ENDPOINTS.AUTH.REFRESH}`, {
         refreshToken,
       });
-      const body = response.data;
-      const tokens = body?.data || body;
-      const accessToken = tokens?.accessToken;
-      const newRefresh = tokens?.refreshToken;
-      if (!accessToken) throw new Error('Refresh response missing accessToken');
+      const tokens = parseAuthTokenResponse(response.data);
+      if (!tokens) throw new Error('Refresh response missing accessToken');
 
-      useAppStore.getState().setTokens(accessToken, newRefresh ?? null);
-      return accessToken;
+      useAppStore
+        .getState()
+        .setTokens(tokens.accessToken, tokens.refreshToken ?? refreshToken);
+      return tokens.accessToken;
     } finally {
       inflightRefresh = null;
     }
