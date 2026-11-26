@@ -105,6 +105,7 @@ export const MatchesScreen: React.FC<MainTabScreenProps<'Matches'>> = ({ navigat
             keyExtractor={(item: Match, index: number) => item?.id || String(index)}
             extraData={[matches]}
             contentContainerStyle={styles.list}
+            estimatedItemSize={88}
             renderItem={({ item }) => {
               const otherId = item.otherUser?.id;
               const conversationId = item.conversationId;

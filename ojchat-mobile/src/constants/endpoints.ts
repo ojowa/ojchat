@@ -24,6 +24,7 @@ export const ENDPOINTS = {
     PREFERENCES: '/users/me/preferences',
     PROMPTS: '/users/me/prompts',
     AVAILABLE_PROMPTS: '/users/prompts',
+    INTERESTS: '/users/interests',
     BLOCK: (userId: string) => `/users/${userId}/block`,
     UNBLOCK: (userId: string) => `/users/${userId}/block`,
     BLOCK_LIST: '/users/me/blocks',

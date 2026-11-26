@@ -146,6 +146,7 @@ const NotificationsScreen: React.FC = ({ navigation }: any) => {
           ListHeaderComponent={renderHeader}
           ListEmptyComponent={renderEmpty}
           contentContainerStyle={styles.listContent}
+          estimatedItemSize={80}
           ItemSeparatorComponent={NotificationSeparator}
           refreshControl={
             <RefreshControl

@@ -225,6 +225,7 @@ export const UserProfileScreen: React.FC<RootStackScreenProps<'UserProfile'>> = 
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
+              estimatedItemSize={PHOTO_HEIGHT}
               onScroll={onScroll}
               renderItem={({ item }: { item: any }) => (
                 <View style={[styles.photoSlide, { width: screenWidth, height: PHOTO_HEIGHT }]}>

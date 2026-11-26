@@ -95,6 +95,24 @@ export class UsersController {
     return this.usersService.getAvailablePrompts();
   }
 
+  @Get('interests')
+  @ApiOperation({ summary: 'Get available interests for profile' })
+  getAvailableInterests() {
+    return this.usersService.getAvailableInterests();
+  }
+
+  @Get('sync')
+  @ApiOperation({ summary: 'Get sync delta' })
+  getSync(@Headers('x-user-id') userId: string, @Query('since') since?: string) {
+    return this.usersService.getSyncDelta(userId, since ? parseInt(since, 10) : 0);
+  }
+
+  @Get('verification')
+  @ApiOperation({ summary: 'Get verification status' })
+  getVerificationStatus(@Headers('x-user-id') userId: string) {
+    return this.usersService.getVerificationStatus(userId);
+  }
+
   @Post('me/photos')
   @ApiOperation({ summary: 'Add a profile photo' })
   addPhoto(@Headers('x-user-id') userId: string, @Body() body: any) {
@@ -143,12 +161,6 @@ export class UsersController {
     return this.usersService.reportUser(userId, id, body);
   }
 
-  @Get('sync')
-  @ApiOperation({ summary: 'Get sync delta' })
-  getSync(@Headers('x-user-id') userId: string, @Query('since') since?: string) {
-    return this.usersService.getSyncDelta(userId, since ? parseInt(since, 10) : 0);
-  }
-
   @Post('me/appeal')
   @ApiOperation({ summary: 'Submit an appeal' })
   submitAppeal(
@@ -183,12 +195,6 @@ export class UsersController {
   ) {
     const { selfieUrl, ...faceMetadata } = body;
     return this.usersService.requestVerification(userId, selfieUrl, faceMetadata);
-  }
-
-  @Get('verification')
-  @ApiOperation({ summary: 'Get verification status' })
-  getVerificationStatus(@Headers('x-user-id') userId: string) {
-    return this.usersService.getVerificationStatus(userId);
   }
 
   @Get('me/streak')

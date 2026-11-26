@@ -160,6 +160,7 @@ export default function ProfilePromptsScreen() {
           extraData={[prompts]}
           renderItem={renderPrompt}
           contentContainerStyle={styles.list}
+          estimatedItemSize={120}
           showsVerticalScrollIndicator={false}
         />
 

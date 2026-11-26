@@ -383,6 +383,7 @@ export const ConversationScreen: React.FC<RootStackScreenProps<'Conversation'>> 
         keyExtractor={keyExtractor}
         renderItem={renderMessage}
         contentContainerStyle={styles.list}
+        estimatedItemSize={80}
         inverted
         ListFooterComponent={
           typingUsers.length > 0 ? (

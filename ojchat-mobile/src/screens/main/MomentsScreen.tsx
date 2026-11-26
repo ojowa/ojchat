@@ -557,6 +557,7 @@ const MomentsScreen: React.FC = () => {
         keyExtractor={(item, index) => (item && item.id) || String(index)}
         extraData={[selectedMoments, activeTab, selectedUserId]}
         contentContainerStyle={styles.momentsList}
+        estimatedItemSize={320}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

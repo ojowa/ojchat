@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -31,11 +31,12 @@ export const InterestSelectorScreen: React.FC<{ navigation: any; route: any }> =
 
   useEffect(() => {
     apiClient
-      .get(ENDPOINTS.USERS.AVAILABLE_PROMPTS)
+      .get(ENDPOINTS.USERS.INTERESTS)
       .then((res: any) => {
-        const data = res?.data || res;
-        setAllInterests(Array.isArray(data) ? data : data?.interests || []);
-        console.log('[InterestSelectorScreen] allInterests:', allInterests.length, 'items');
+        const data = res?.interests ? res : res?.data ?? res;
+        const list = Array.isArray(data) ? data : data?.interests || [];
+        setAllInterests(list);
+        logger.debug('Interests loaded', { count: list.length });
       })
       .catch((err) => {
         logger.warn('Failed to load interests', {
@@ -66,7 +67,28 @@ export const InterestSelectorScreen: React.FC<{ navigation: any; route: any }> =
     activeCategory === 'All'
       ? allInterests
       : allInterests.filter((i) => (i.category || 'Other') === activeCategory);
-  console.log('[InterestSelectorScreen] filteredInterests:', filteredInterests.length, 'items');
+
+  // FlashList cells are single-column rows; group chips into rows that fit the
+  // screen width so we get the old FlatList flexWrap grid without using
+  // unsupported contentContainerStyle props (flexWrap/gap are rejected).
+  const { width: screenWidth } = useWindowDimensions();
+  const rows: Interest[][] = [];
+  {
+    const available = screenWidth - spacing.md * 2;
+    let current: Interest[] = [];
+    let currentWidth = 0;
+    for (const interest of filteredInterests) {
+      const chipWidth = Math.max(72, interest.name.length * 7.5 + 48) + spacing.sm;
+      if (current.length > 0 && currentWidth + chipWidth > available) {
+        rows.push(current);
+        current = [];
+        currentWidth = 0;
+      }
+      current.push(interest);
+      currentWidth += chipWidth;
+    }
+    if (current.length > 0) rows.push(current);
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -88,6 +110,7 @@ export const InterestSelectorScreen: React.FC<{ navigation: any; route: any }> =
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.tabsList}
+          estimatedItemSize={40}
           keyExtractor={(item) => item}
           renderItem={({ item }) => (
             <TouchableOpacity
@@ -105,25 +128,33 @@ export const InterestSelectorScreen: React.FC<{ navigation: any; route: any }> =
 
       {/* Interests Grid */}
       <FlashList
-        data={filteredInterests}
-        keyExtractor={(item, index) => item?.id || String(index)}
+        data={rows}
+        keyExtractor={(_, index) => String(index)}
         contentContainerStyle={styles.list}
+        estimatedItemSize={48}
         showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => {
-          const isSelected = selected.has(item.id);
-          return (
-            <TouchableOpacity
-              style={[styles.chip, isSelected && styles.chipSelected]}
-              onPress={() => toggleInterest(item.id)}
-              activeOpacity={0.7}
-            >
-              {isSelected && <Ionicons name="checkmark-circle" size={16} color={colors.primary} />}
-              <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
-                {item.name}
-              </Text>
-            </TouchableOpacity>
-          );
-        }}
+        renderItem={({ item: row }) => (
+          <View style={styles.row}>
+            {row.map((item) => {
+              const isSelected = selected.has(item.id);
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[styles.chip, isSelected && styles.chipSelected]}
+                  onPress={() => toggleInterest(item.id)}
+                  activeOpacity={0.7}
+                >
+                  {isSelected && (
+                    <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
+                  )}
+                  <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
+                    {item.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
       />
 
       {/* Save Button */}
@@ -189,13 +220,13 @@ const styles = StyleSheet.create({
   },
   tabsList: {
     paddingHorizontal: spacing.md,
-    gap: spacing.xs,
   },
   tab: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.full,
     backgroundColor: colors.gray100,
+    marginRight: spacing.xs,
   },
   tabActive: {
     backgroundColor: colors.primary,
@@ -214,9 +245,12 @@ const styles = StyleSheet.create({
   list: {
     padding: spacing.md,
     paddingBottom: spacing.xxl,
+  },
+  row: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   chip: {
     flexDirection: 'row',

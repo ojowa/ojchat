@@ -64,6 +64,7 @@ export default function BlockListScreen() {
         <FlashList<BlockedUser>
           data={blockedUsers}
           keyExtractor={(item, index) => item?.id || String(index)}
+          estimatedItemSize={72}
           renderItem={({ item }) => (
             <View style={styles.userRow}>
               <Avatar uri={undefined} size={44} />

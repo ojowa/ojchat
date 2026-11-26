@@ -14,6 +14,7 @@ import {
   Appeal,
   VerificationRequest,
   DailyStreak,
+  Interest,
 } from '@app/common/entities';
 
 @Injectable()
@@ -31,6 +32,7 @@ export class UsersService {
     @InjectRepository(VerificationRequest)
     private verificationRepo: Repository<VerificationRequest>,
     @InjectRepository(DailyStreak) private streakRepo: Repository<DailyStreak>,
+    @InjectRepository(Interest) private interestRepo: Repository<Interest>,
   ) {}
 
   async getMe(userId: string) {
@@ -329,6 +331,14 @@ export class UsersService {
       order: { sortOrder: 'ASC' },
     });
     return { prompts };
+  }
+
+  async getAvailableInterests() {
+    const interests = await this.interestRepo.find({
+      where: { isActive: true },
+      order: { category: 'ASC', name: 'ASC' },
+    });
+    return { interests };
   }
 
   async submitAppeal(

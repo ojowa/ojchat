@@ -325,6 +325,7 @@ const LikesYouScreen: React.FC<RootStackScreenProps<'LikesYou'>> = ({ navigation
           extraData={[likes]}
           ListHeaderComponent={renderHeader}
           contentContainerStyle={styles.list}
+          estimatedItemSize={260}
           renderItem={renderItem}
           showsVerticalScrollIndicator={false}
           refreshControl={

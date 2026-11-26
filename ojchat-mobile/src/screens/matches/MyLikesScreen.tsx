@@ -63,6 +63,7 @@ export const MyLikesScreen: React.FC<RootStackScreenProps<'MyLikes'>> = ({ navig
         }
         extraData={likes}
         contentContainerStyle={styles.list}
+        estimatedItemSize={88}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons name="heart-outline" size={64} color={colors.gray300} />

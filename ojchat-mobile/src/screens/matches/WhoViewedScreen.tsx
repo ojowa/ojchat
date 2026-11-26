@@ -161,6 +161,7 @@ export const WhoViewedScreen: React.FC<RootStackScreenProps<'WhoViewed'>> = ({ n
         data={viewers}
         keyExtractor={(item, index) => item?.id || String(index)}
         contentContainerStyle={styles.list}
+        estimatedItemSize={88}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons name="eye-off-outline" size={64} color={colors.gray300} />

@@ -61,6 +61,7 @@ export default function DevicesScreen() {
       <FlashList<Device>
         data={devices}
         keyExtractor={(item, index) => item?.deviceId || String(index)}
+        estimatedItemSize={74}
         renderItem={({ item }) => (
           <View style={styles.deviceRow}>
             <View style={styles.deviceInfo}>
