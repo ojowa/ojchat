@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { getAdminUser, AdminUser } from "@/lib/api";
 import {
   LayoutDashboard,
   Users,
@@ -50,6 +52,16 @@ const navItems = [
 
 export function Sidebar({ className }: { className?: string }) {
   const pathname = usePathname();
+  const [admin, setAdmin] = useState<AdminUser | null>(null);
+
+  useEffect(() => {
+    setAdmin(getAdminUser());
+  }, []);
+
+  const adminName = admin?.name || admin?.email || "Admin";
+  const adminRole = admin?.role
+    ? admin.role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    : "Admin";
 
   return (
     <aside
@@ -91,8 +103,8 @@ export function Sidebar({ className }: { className?: string }) {
             <Shield className="h-4 w-4" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate" id="sidebar-admin-name">Admin</p>
-            <p className="text-xs text-muted-foreground truncate" id="sidebar-admin-role">super_admin</p>
+            <p className="text-sm font-medium truncate" id="sidebar-admin-name">{adminName}</p>
+            <p className="text-xs text-muted-foreground truncate" id="sidebar-admin-role">{adminRole}</p>
           </div>
         </div>
       </div>

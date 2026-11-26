@@ -22,6 +22,27 @@ export function getAccessToken(): string | null {
   return null;
 }
 
+export function setAdminUser(admin: AdminUser | null) {
+  if (typeof window !== "undefined") {
+    if (admin) localStorage.setItem("admin_user", JSON.stringify(admin));
+    else localStorage.removeItem("admin_user");
+  }
+}
+
+export function getAdminUser(): AdminUser | null {
+  if (typeof window !== "undefined") {
+    const raw = localStorage.getItem("admin_user");
+    if (raw) {
+      try {
+        return JSON.parse(raw) as AdminUser;
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
 interface ApiOptions extends RequestInit {
   params?: Record<string, string | number | undefined>;
 }
@@ -168,6 +189,7 @@ async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T
     const error = extractApiError(body, res.status);
     if (res.status === 401 && !isAuthRequest) {
       setAccessToken(null);
+      setAdminUser(null);
       if (typeof window !== "undefined") window.location.href = "/login";
     }
     throw error;
@@ -196,7 +218,7 @@ export interface AdminUser {
   id: string;
   email: string;
   name: string;
-  role: "super_admin" | "moderator";
+  role: "super_admin" | "admin" | "moderator";
   isActive: boolean;
   mfaVerified?: boolean;
 }

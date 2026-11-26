@@ -3,7 +3,7 @@ export interface AdminUser {
   email: string;
   name: string;
   fullName?: string;
-  role: "super_admin" | "moderator";
+  role: "super_admin" | "admin" | "moderator";
   status?: "active" | "suspended" | "banned";
   isActive: boolean;
   mfaVerified?: boolean;

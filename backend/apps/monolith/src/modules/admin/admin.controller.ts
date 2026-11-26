@@ -34,6 +34,8 @@ export class AdminController {
   }
 
   private requireRole(payload: any, allowedRoles: string[]) {
+    // super_admin is the highest role and always passes role checks
+    if (payload.role === 'super_admin') return;
     if (!allowedRoles.includes(payload.role)) {
       throw new ForbiddenException('Insufficient permissions');
     }

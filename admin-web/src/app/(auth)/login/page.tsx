@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorBanner } from "@/components/shared/error-banner";
-import { api, setAccessToken, AdminUser } from "@/lib/api";
+import { api, setAccessToken, setAdminUser, AdminUser } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -39,6 +39,7 @@ export default function LoginPage() {
 
       if (res.tokens?.accessToken) {
         setAccessToken(res.tokens.accessToken);
+        if (res.admin) setAdminUser(res.admin);
         router.push("/dashboard");
       }
     } catch (err: unknown) {
@@ -61,6 +62,7 @@ export default function LoginPage() {
 
       if (res.tokens?.accessToken) {
         setAccessToken(res.tokens.accessToken);
+        if (res.admin) setAdminUser(res.admin);
         router.push("/dashboard");
       }
     } catch (err: unknown) {

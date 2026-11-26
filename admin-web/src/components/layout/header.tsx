@@ -2,7 +2,7 @@
 
 import { LogOut, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { setAccessToken } from "@/lib/api";
+import { setAccessToken, setAdminUser } from "@/lib/api";
 import { useRouter } from "next/navigation";
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
@@ -10,6 +10,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
 
   const handleLogout = () => {
     setAccessToken(null);
+    setAdminUser(null);
     router.push("/login");
   };
 
