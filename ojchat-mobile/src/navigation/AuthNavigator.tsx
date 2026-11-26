@@ -12,7 +12,7 @@ import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
 const Stack = createNativeStackNavigator();
 
 export const AuthNavigator: React.FC = () => (
-  <Stack.Navigator screenOptions={{ headerShown: false }}>
+  <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Splash">
     <Stack.Screen name="Splash" component={SplashScreen} />
     <Stack.Screen name="Welcome" component={WelcomeScreen} />
     <Stack.Screen name="Onboarding" component={OnboardingFlow} />

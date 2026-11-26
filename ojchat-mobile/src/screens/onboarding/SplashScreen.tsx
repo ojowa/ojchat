@@ -1,7 +1,6 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View, StyleSheet, StatusBar } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
@@ -9,16 +8,7 @@ import { spacing } from '../../theme/spacing';
 import { Text } from '../../components/common';
 
 const SplashScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      navigation.replace('Welcome');
-    }, 2500);
-
-    return () => clearTimeout(timer);
-  }, [navigation]);
 
   return (
     <SafeAreaView style={styles.container}>
