@@ -59,6 +59,14 @@ export class AuthMiddleware implements NestMiddleware {
     // Never trust a client-supplied identity header.
     delete req.headers['x-user-id'];
 
+    // CORS preflight requests carry no credentials by design (the browser
+    // sends the Authorization header only on the real request). Rejecting
+    // them would make the browser block the actual API call, so they are
+    // always passed through.
+    if (req.method === 'OPTIONS') {
+      return next();
+    }
+
     const url = (req as any).originalUrl || req.url;
     const isPublic = isPublicPath(url);
 

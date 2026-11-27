@@ -23,6 +23,10 @@ export class JwtAuthGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<AuthedRequest>();
     const url = String(req.originalUrl || req.url || '');
 
+    // CORS preflight: no credentials are attached, so it can never satisfy
+    // authentication and must not be rejected.
+    if (req.method === 'OPTIONS') return true;
+
     // Verified user JWT — identity established by the middleware.
     if (req.userId) return true;
 

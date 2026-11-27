@@ -10,6 +10,7 @@ const userToken = (sub: string) => jwt.sign({ sub }, USER_SECRET, { expiresIn: '
 const adminToken = () => jwt.sign({ role: 'super_admin' }, ADMIN_SECRET, { expiresIn: '5m' });
 
 interface FakeReq {
+  method?: string;
   url: string;
   originalUrl: string;
   headers: Record<string, string | undefined>;
@@ -19,6 +20,7 @@ interface FakeReq {
 }
 
 const makeReq = (url: string, headers: FakeReq['headers'] = {}, extra: Partial<FakeReq> = {}): FakeReq => ({
+  method: 'GET',
   url,
   originalUrl: url,
   headers,
@@ -95,6 +97,22 @@ describe('AuthMiddleware (x-user-id spoofing fix)', () => {
     expect(isPublicPath('/v1/auth/logout')).toBe(false);
     expect(isPublicPath('/v1/admin/users')).toBe(false);
   });
+
+  it('never rejects a CORS preflight request on a protected path', () => {
+    // Browsers send the OPTIONS preflight WITHOUT the Authorization header.
+    // Rejecting it would make the browser block the real (authenticated)
+    // request, which is what broke the admin-web user list.
+    const { nextCalled, error } = run(makeReq('/v1/admin/users', {}, { method: 'OPTIONS' }));
+    expect(nextCalled).toBe(true);
+    expect(error).toBeNull();
+  });
+
+  it('never rejects a CORS preflight request that carries a bogus token', () => {
+    const { error } = run(
+      makeReq('/v1/matching/feed', { authorization: 'Bearer not-a-jwt' }, { method: 'OPTIONS' }),
+    );
+    expect(error).toBeNull();
+  });
 });
 
 describe('JwtAuthGuard (defense in depth)', () => {
@@ -116,6 +134,11 @@ describe('JwtAuthGuard (defense in depth)', () => {
 
   it('allows non-/v1 paths (Swagger UI)', () => {
     expect(activate(makeReq('/docs'))).toBe(true);
+  });
+
+  it('allows CORS preflight requests through', () => {
+    expect(activate(makeReq('/v1/admin/users', {}, { method: 'OPTIONS' }))).toBe(true);
+    expect(activate(makeReq('/v1/matching/feed', {}, { method: 'OPTIONS' }))).toBe(true);
   });
 
   it('allows admin routes only with a middleware-verified admin token', () => {

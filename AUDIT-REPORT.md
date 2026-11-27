@@ -351,4 +351,32 @@ Fix #4 renamed the unique indexes in the entity decorators to `@Index('IDX_likes
 - Fixed in `like`, `pass`, `daily-like` and `block` entities: `@Index('IDX_likes_user_liked', ['userId', 'likedUserId'], { unique: true })`.
 - Added `libs/common/src/entities/entities-metadata.spec.ts`, which builds the **real** TypeORM metadata for every entity (exactly like the app does) and asserts the four named unique indexes exist on the right columns. The test fails with the old decorator and passes with the fix — a broken decorator can no longer reach production.
 
+### 🟠 Production incident — the admin panel logged in but never loaded any data (regression introduced by fix #1)
+
+**Symptom:** `https://ojchat.vercel.app` authenticates successfully, but every data screen (user list, dashboard, reports) stays empty and the console shows a network error. The mobile app was unaffected.
+
+**Root cause — middleware ordering.** In `main.ts` the auth middleware was registered *before* `app.enableCors(...)`:
+
+```ts
+app.use(authMiddleware.use.bind(authMiddleware));   // line 55  ← ran first
+...
+app.enableCors({ ... });                              // line 71  ← ran second
+```
+
+Browsers do **not** send the `Authorization` header on a CORS preflight — the `OPTIONS` request is sent bare, and only the real (credentialed) request carries the token afterwards. Fix #1 made the auth middleware reject unauthenticated requests on every non-public path, so it rejected the preflight with **401 and no CORS headers**. The browser then blocked the real `GET /admin/users` outright, before it was ever sent. The login request itself is a public path, so it succeeded — which is exactly why the panel looked "logged in but empty".
+
+This was invisible to the API smoke tests because **React Native does not enforce CORS** — only browsers do.
+
+**Fix:**
+- `app.enableCors(...)` is now registered **before** the auth middleware (and only once), so preflights are answered by the CORS layer before auth ever sees them.
+- `AuthMiddleware` now passes `OPTIONS` requests straight through (a preflight carries no credentials and can never satisfy authentication).
+- `JwtAuthGuard` likewise allows `OPTIONS`, so the global guard cannot reject a preflight if the middleware is ever reordered.
+- The CORS `origin` callback no longer **throws** for a disallowed origin — throwing turned a blocked cross-origin call into a **500**; it now returns `false`, so the header is simply omitted and the browser blocks the call cleanly.
+
+**Verification:**
+- Live deployment before the fix: `OPTIONS /v1/admin/users` → **401, no CORS headers** (reproduced directly against `https://ojchat-backend.vercel.app`).
+- Local build after the fix: preflight → **204** with `Access-Control-Allow-Origin: https://ojchat.vercel.app` and `Authorization` allowed; a disallowed origin gets **no** ACAO header and no 500; anonymous calls to protected routes are still rejected (401); the full `login → GET /admin/users` flow returns 7 users with CORS headers present.
+- Added `backend/scripts/verify-admin-web.ts` (`npm run verify:admin-web`) — a deployment check that replays the browser sequence against any target (`API_BASE`, `ADMIN_WEB_ORIGIN`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`). It **currently reports the live deployment as still failing**, because the backend has not been rebuilt/redeployed yet; it goes green once that happens.
+- 7 new regression tests (`main.spec.ts` asserts the CORS-before-auth ordering statically; `auth.middleware.spec.ts` and `jwt-auth.guard` cover the `OPTIONS` pass-through).
+
 **Bottom line:** fix #1 before anything else — as it stands, any anonymous caller can act as any user. Then privacy redaction (#2), then the match/limit races (#4), then the geospatial + query rework (#5–6) before scaling past a few thousand users. The scoring/caching layers (#7–8) are what turn this from "correct" into "fast at 10k concurrent swipers."

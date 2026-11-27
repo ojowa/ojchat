@@ -47,6 +47,42 @@ export async function createApp(expressInstance?: Express): Promise<NestExpressA
     app.get(AuditLogInterceptor),
   );
 
+  // CORS MUST be registered before the auth middleware.
+  //
+  // Browsers send an OPTIONS preflight WITHOUT the Authorization header and
+  // only send the real (credentialed) request after the preflight succeeds.
+  // If the auth middleware runs first it rejects that preflight with 401 and
+  // no CORS headers, so the browser blocks the actual request outright — the
+  // symptom is "the admin panel logs in but no data ever loads".
+  app.enableCors({
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      const allowedOrigins = [
+        process.env.CORS_ORIGIN,
+        'https://ojchat.vercel.app',
+        'https://admin-web-eta-nine.vercel.app',
+        'http://localhost:3013',
+      ].filter(Boolean);
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        // Do not throw: an Error here becomes a 500. Returning false omits the
+        // CORS headers, which makes the browser block the call cleanly.
+        callback(null, false);
+      }
+    },
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    credentials: true,
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Request-Id',
+      'X-Platform',
+      'X-App-Version',
+      'X-Device-Id',
+      'X-Timeout',
+    ],
+  });
+
   const requestId = new RequestIdMiddleware();
   app.use(requestId.use.bind(requestId));
   const deviceInfo = new DeviceInfoMiddleware();
@@ -66,33 +102,6 @@ export async function createApp(expressInstance?: Express): Promise<NestExpressA
       req.headers['x-user-id'] = req.userId;
     }
     next();
-  });
-
-  app.enableCors({
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      const allowedOrigins = [
-        process.env.CORS_ORIGIN,
-        'https://ojchat.vercel.app',
-        'https://admin-web-eta-nine.vercel.app',
-        'http://localhost:3013',
-      ].filter(Boolean);
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error(`Not allowed by CORS: ${origin}`));
-      }
-    },
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    credentials: true,
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'X-Request-Id',
-      'X-Platform',
-      'X-App-Version',
-      'X-Device-Id',
-      'X-Timeout',
-    ],
   });
 
   app.use(

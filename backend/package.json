@@ -14,6 +14,7 @@
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\"",
     "lint": "eslint \"apps/**/*.ts\" \"libs/**/*.ts\" --fix",
     "package:cpanel": "node scripts/package-cpanel.js",
+    "verify:admin-web": "ts-node -r tsconfig-paths/register scripts/verify-admin-web.ts",
     "typecheck": "tsc --noEmit",
     "start": "nest start monolith",
     "start:dev": "nest start monolith --watch",
