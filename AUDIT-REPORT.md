@@ -258,7 +258,7 @@ Make `@OnEvent` handlers run via an outbox/queue (BullMQ + Redis, or at minimum 
 | 1 | ✅ **DONE** (`e5b482e`) | 🔴 **P0 — today** | Fix auth middleware: reject unauthenticated non-public routes + strip client `x-user-id` (§4.1). Add `APP_GUARD`. | <1h |
 | 2 | ✅ **DONE** (`63b3e45`) | 🔴 **P0 — today** | Stop leaking `latitude`/`longitude`/exact DOB in `getFeed` + AI feed (§4.7) | 1h |
 | 3 | ✅ **DONE** | 🔴 **P0 — this week** | Add block/existence/target-visibility checks to `like/pass/superlike` (C5) | 2h |
-| 4 | ⬜ TODO | 🔴 **P0 — this week** | Canonical match upsert + partial unique index + transaction (§4.2); atomic daily counters (§4.3) | 3h |
+| 4 | ✅ **DONE** | 🔴 **P0 — this week** | Canonical match upsert + partial unique index + transaction (§4.2); atomic daily counters (§4.3) | 3h |
 | 5 | ⬜ TODO | 🟠 **P1** | PostGIS migration + `ST_DWithin` distance filter in `getFeed` — fixes C3 + B5 together (§4.4). Verify/enable `postgis` extension first (passport query already assumes it) | 4h |
 | 6 | ⬜ TODO | 🟠 **P1** | Replace in-memory exclusion arrays & `IN(allIds)` with `NOT EXISTS`/`EXISTS` anti-joins (§4.5); add missing indexes | 4h |
 | 7 | ⬜ TODO | 🟠 **P1** | Redis deck cache with stale-queue invalidation on block/delete/match (§4.8) | 2–3d |
@@ -294,5 +294,27 @@ Make `@OnEvent` handlers run via an outbox/queue (BullMQ + Redis, or at minimum 
 - `like()` / `superlike()` were reordered so the idempotency check runs **before** the quota check: re-liking somebody already liked no longer consumes quota and no longer fails with "limit reached" when the user is already at their limit (the app retries likes after a flaky connection). The limit message also showed `limit/limit` before — it now shows the real count.
 - Mobile: swipe failures are surfaced (`Alert` with the server message) and the card is restored instead of staying stuck off-screen; `SwipeableCard` now resets its drag transform when the profile changes, so the next card is actually visible after a drag-swipe.
 - 18 new tests (`matching.service.spec.ts`).
+
+**Fix #4 — Canonical match upsert + atomic daily counters (C4)**
+
+*The live database was inspected first, and the problem turned out to be worse than reported:* the `public` schema had **no unique index at all** on `matches(user1Id,user2Id)`, `likes(userId,likedUserId)`, `passes(userId,passedUserId)` or `daily_likes(userId,date)` — only the primary keys. (A legacy `matching` schema with snake_case columns still exists in the same database but is not used by the monolith.) So duplicate matches, duplicate likes and split daily-counter rows were all possible, and the quota check read one counter row while the increment hit another.
+
+- **Migration `1795730000000-CanonicalMatchUniqueness`** (applied to the live DB):
+  - normalises every match row to canonical order (`user1Id < user2Id`), removes self-matches and duplicate rows (keeping an active row over an inactive one, then the oldest),
+  - deduplicates likes/passes and **merges** duplicate daily-counter rows by summing them (no quota is lost),
+  - creates the unique indexes the service depends on: `IDX_matches_canonical` (unique on `LEAST(user1Id,user2Id), GREATEST(user1Id,user2Id)` where `isActive`, so an unmatch can still be followed by a fresh match), `IDX_likes_user_liked`, `IDX_passes_user_passed`, `IDX_daily_likes_user_date`, `IDX_blocks_users`.
+  - Verified on the live DB: a duplicate like, a duplicate match in the *same* order and a duplicate match in the *reversed* order are all rejected.
+- **Service** — `like()` / `superlike()` now run in a single transaction that:
+  1. **locks both participant rows** (`SELECT … ORDER BY id FOR UPDATE`) so two users swiping each other at the same instant are serialised. Without it both sides can observe a half-state and *silently lose* the match — the audit's worst outcome. The deterministic lock order prevents deadlocks;
+  2. reserves the daily quota with a **single conditional upsert** (`INSERT … ON CONFLICT DO UPDATE … WHERE counter + delta <= limit`) — the old read-then-increment let concurrent swipes exceed the plan limit, and the create-if-missing path raced into a 500;
+  3. inserts the like idempotently (`ON CONFLICT DO NOTHING`);
+  4. creates the match with one atomic statement (`INSERT … SELECT … WHERE both likes exist … ON CONFLICT DO NOTHING RETURNING`) — it can only ever create one match row, and `match.created` is emitted only by the side that actually created it, so the conversation and the notifications are created exactly once.
+- `undo()` / `rewind()` give quota back with `GREATEST(0, counter - 1)` so a counter can never go negative.
+- `pass()` inserts idempotently as well.
+- **Verified against the live database with real concurrent transactions:**
+  - simultaneous mutual likes A↔B → **exactly one** match row (never 0, never 2),
+  - 10 concurrent likes against 10 different targets with a limit of 5 → **exactly 5** likes recorded and 5 refused, one counter row,
+  - 10 concurrent identical likes → **one** like row.
+- 24 tests in `matching.service.spec.ts` (validation + transactional behaviour).
 
 **Bottom line:** fix #1 before anything else — as it stands, any anonymous caller can act as any user. Then privacy redaction (#2), then the match/limit races (#4), then the geospatial + query rework (#5–6) before scaling past a few thousand users. The scoring/caching layers (#7–8) are what turn this from "correct" into "fast at 10k concurrent swipers."

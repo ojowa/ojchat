@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 
 @Entity('passes')
-@Index(['userId', 'passedUserId'], { unique: true })
+@Index('IDX_passes_user_passed', { unique: true })
 export class Pass {
   @PrimaryGeneratedColumn('uuid') id: string;
   @Column() userId: string;

@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
+import { getRepositoryToken, getDataSourceToken } from '@nestjs/typeorm';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { MatchingService } from './matching.service';
@@ -71,11 +71,21 @@ const repoMock = () => ({
   update: jest.fn().mockResolvedValue({ affected: 1 }),
 });
 
-describe('MatchingService swipe target validation (audit C5)', () => {
+describe('MatchingService swipe target validation (audit C5) + atomic swipes (C4)', () => {
   let service: MatchingService;
   let repos: Record<string, any>;
   let eventEmitter: { emit: jest.Mock };
   let enhancementService: { trackBehavior: jest.Mock; updateEloOnMatch: jest.Mock };
+
+  // Result sets for the raw statements executed inside the transaction.
+  let existingLikeRows: any[];
+  let quotaRows: any[];
+  let matchRows: any[];
+  let currentCounterRows: any[];
+  let manager: { query: jest.Mock };
+  let dataSource: { transaction: jest.Mock; query: jest.Mock };
+
+  const sqlCalls = () => manager.query.mock.calls.map((c) => c[0] as string);
 
   const build = async () => {
     repos = {
@@ -104,6 +114,29 @@ describe('MatchingService swipe target validation (audit C5)', () => {
     enhancementService = {
       trackBehavior: jest.fn().mockResolvedValue(undefined),
       updateEloOnMatch: jest.fn().mockResolvedValue(undefined),
+    };
+
+    existingLikeRows = [];
+    quotaRows = [{ id: 'dl-1', likesGiven: 1, superLikesGiven: 0 }];
+    matchRows = [];
+    currentCounterRows = [{ likesGiven: 10, superLikesGiven: 0 }];
+
+    manager = {
+      query: jest.fn(async (sql: string, params?: any[]) => {
+        if (sql.includes('FOR UPDATE')) return [];
+        if (sql.startsWith('SELECT "id" FROM "likes"')) return existingLikeRows;
+        if (sql.includes('INSERT INTO "daily_likes"')) return quotaRows;
+        if (sql.includes('INSERT INTO "likes"')) return [{ id: 'like-1' }];
+        if (sql.includes('INSERT INTO "matches"')) return matchRows;
+        if (sql.includes('INSERT INTO "passes"')) return [{ id: 'pass-1' }];
+        if (sql.includes('SELECT "likesGiven"')) return currentCounterRows;
+        return [];
+      }),
+    };
+
+    dataSource = {
+      transaction: jest.fn(async (cb: any) => cb(manager)),
+      query: jest.fn().mockResolvedValue([]),
     };
 
     const repoProviders = [
@@ -135,6 +168,7 @@ describe('MatchingService swipe target validation (audit C5)', () => {
       providers: [
         MatchingService,
         ...repoProviders,
+        { provide: getDataSourceToken(), useValue: dataSource },
         { provide: EventEmitter2, useValue: eventEmitter },
         { provide: MatchmakingEngine, useValue: {} },
         {
@@ -174,31 +208,30 @@ describe('MatchingService swipe target validation (audit C5)', () => {
     });
     repos.Profile.findOne.mockResolvedValue(makeProfile(TARGET_ID));
     repos.Block.findOne.mockResolvedValue(null);
-    repos.Like.findOne.mockResolvedValue(null);
     repos.Match.findOne.mockResolvedValue(null);
     repos.Subscription.findOne.mockResolvedValue(null);
     repos.Boost.findOne.mockResolvedValue(null);
     repos.DailyLike.findOne.mockResolvedValue(null);
   });
 
-  describe('like()', () => {
+  describe('like() — target validation', () => {
     it('rejects a target that does not exist', async () => {
       repos.User.find.mockResolvedValue([makeUser(ACTOR_ID)]);
       await expect(service.like(ACTOR_ID, TARGET_ID)).rejects.toBeInstanceOf(NotFoundException);
-      expect(repos.Like.save).not.toHaveBeenCalled();
+      expect(manager.query).not.toHaveBeenCalled();
     });
 
     it('rejects a target who blocked the caller', async () => {
       repos.Block.findOne.mockResolvedValue({ blockerId: TARGET_ID, blockedId: ACTOR_ID });
       await expect(service.like(ACTOR_ID, TARGET_ID)).rejects.toBeInstanceOf(ForbiddenException);
-      expect(repos.Like.save).not.toHaveBeenCalled();
+      expect(manager.query).not.toHaveBeenCalled();
       expect(eventEmitter.emit).not.toHaveBeenCalled();
     });
 
     it('rejects a target the caller blocked', async () => {
       repos.Block.findOne.mockResolvedValue({ blockerId: ACTOR_ID, blockedId: TARGET_ID });
       await expect(service.like(ACTOR_ID, TARGET_ID)).rejects.toBeInstanceOf(ForbiddenException);
-      expect(repos.Like.save).not.toHaveBeenCalled();
+      expect(manager.query).not.toHaveBeenCalled();
     });
 
     it('rejects a banned target', async () => {
@@ -207,7 +240,7 @@ describe('MatchingService swipe target validation (audit C5)', () => {
         makeUser(TARGET_ID, { status: UserStatus.BANNED }),
       ]);
       await expect(service.like(ACTOR_ID, TARGET_ID)).rejects.toBeInstanceOf(ForbiddenException);
-      expect(repos.Like.save).not.toHaveBeenCalled();
+      expect(manager.query).not.toHaveBeenCalled();
     });
 
     it('rejects a suspended target', async () => {
@@ -224,76 +257,135 @@ describe('MatchingService swipe target validation (audit C5)', () => {
         makeUser(TARGET_ID),
       ]);
       await expect(service.like(ACTOR_ID, TARGET_ID)).rejects.toBeInstanceOf(ForbiddenException);
-      expect(repos.Like.save).not.toHaveBeenCalled();
+      expect(manager.query).not.toHaveBeenCalled();
     });
 
     it('rejects a target without an active profile', async () => {
       repos.Profile.findOne.mockResolvedValue(null);
       await expect(service.like(ACTOR_ID, TARGET_ID)).rejects.toBeInstanceOf(NotFoundException);
-      expect(repos.Like.save).not.toHaveBeenCalled();
+      expect(manager.query).not.toHaveBeenCalled();
     });
 
     it('rejects a self-like', async () => {
       await expect(service.like(ACTOR_ID, ACTOR_ID)).rejects.toBeInstanceOf(BadRequestException);
-      expect(repos.Like.save).not.toHaveBeenCalled();
+      expect(manager.query).not.toHaveBeenCalled();
     });
 
     it('rejects a malformed target id instead of hitting the database', async () => {
       await expect(service.like(ACTOR_ID, 'not-a-uuid')).rejects.toBeInstanceOf(BadRequestException);
-      expect(repos.Like.save).not.toHaveBeenCalled();
+      expect(manager.query).not.toHaveBeenCalled();
     });
+  });
 
-    it('creates the like, consumes quota and notifies the target', async () => {
+  describe('like() — atomic quota and match creation', () => {
+    it('reserves the quota and inserts the like in one transaction', async () => {
       const result = await service.like(ACTOR_ID, TARGET_ID);
 
       expect(result).toEqual({ liked: true, matched: false });
-      expect(repos.Like.create).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: ACTOR_ID, likedUserId: TARGET_ID }),
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+
+      const calls = sqlCalls();
+      expect(calls.some((sql) => sql.includes('INSERT INTO "likes"'))).toBe(true);
+      expect(calls.some((sql) => sql.includes('INSERT INTO "daily_likes"'))).toBe(true);
+
+      // The quota is reserved with a single conditional upsert — no
+      // read-then-write race.
+      const quotaCall = manager.query.mock.calls.find((c) =>
+        (c[0] as string).includes('INSERT INTO "daily_likes"'),
       );
-      expect(repos.Like.save).toHaveBeenCalled();
-      expect(repos.DailyLike.increment).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'generated-id' }),
-        'likesGiven',
-        1,
+      expect(quotaCall?.[0]).toContain('ON CONFLICT ("userId", date) DO UPDATE');
+      // The limit is enforced inside the same statement — no read-then-write.
+      expect(quotaCall?.[0]).toContain(
+        'WHERE "daily_likes"."likesGiven" + EXCLUDED."likesGiven" <= $5',
       );
+    });
+
+    it('serialises concurrent swipes by locking both participants', async () => {
+      await service.like(ACTOR_ID, TARGET_ID);
+      const lockCall = manager.query.mock.calls.find((c) =>
+        (c[0] as string).includes('FOR UPDATE'),
+      );
+      expect(lockCall).toBeDefined();
+      expect(lockCall?.[0]).toContain('ORDER BY "id"');
+      expect(lockCall?.[1]).toEqual([ACTOR_ID, TARGET_ID]);
+    });
+
+    it('does not consume quota when the like already exists', async () => {
+      existingLikeRows = [{ id: 'like-1' }];
+      quotaRows = [];
+
+      const result = await service.like(ACTOR_ID, TARGET_ID);
+
+      expect(result).toEqual({ liked: true, matched: false });
+      expect(sqlCalls().some((sql) => sql.includes('INSERT INTO "daily_likes"'))).toBe(false);
+      expect(sqlCalls().some((sql) => sql.includes('INSERT INTO "likes"'))).toBe(false);
+    });
+
+    it('rejects the swipe when the atomic quota reservation is refused', async () => {
+      quotaRows = [];
+      currentCounterRows = [{ likesGiven: 10, superLikesGiven: 0 }];
+
+      await expect(service.like(ACTOR_ID, TARGET_ID)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.like(ACTOR_ID, TARGET_ID)).rejects.toThrow('10/10');
+      expect(sqlCalls().some((sql) => sql.includes('INSERT INTO "likes"'))).toBe(false);
+    });
+
+    it('creates the match when both likes exist and reports it once', async () => {
+      matchRows = [{ id: 'match-1', conversationId: null }];
+
+      const result = await service.like(ACTOR_ID, TARGET_ID);
+
+      expect(result).toMatchObject({ liked: true, matched: true, matchId: 'match-1' });
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'match.created',
+        expect.objectContaining({ matchId: 'match-1' }),
+      );
+      expect(enhancementService.updateEloOnMatch).toHaveBeenCalledTimes(2);
+    });
+
+    it('writes the match row in canonical order', async () => {
+      matchRows = [{ id: 'match-1', conversationId: null }];
+
+      await service.like(TARGET_ID, ACTOR_ID);
+
+      const matchCall = manager.query.mock.calls.find((c) =>
+        (c[0] as string).includes('INSERT INTO "matches"'),
+      );
+      const [, params] = matchCall as [string, any[]];
+      expect(params[0]).toBe(ACTOR_ID < TARGET_ID ? ACTOR_ID : TARGET_ID);
+      expect(params[1]).toBe(ACTOR_ID < TARGET_ID ? TARGET_ID : ACTOR_ID);
+    });
+
+    it('does not create a match when the mutual like is missing', async () => {
+      matchRows = [];
+
+      const result = await service.like(ACTOR_ID, TARGET_ID);
+
+      expect(result).toEqual({ liked: true, matched: false });
+      expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+        'match.created',
+        expect.anything(),
+      );
+      expect(eventEmitter.emit).toHaveBeenCalledWith('user.liked', {
+        likerId: ACTOR_ID,
+        likedId: TARGET_ID,
+      });
+    });
+
+    it('notifies the target only for a new like', async () => {
+      await service.like(ACTOR_ID, TARGET_ID);
       expect(eventEmitter.emit).toHaveBeenCalledWith(
         'notification.send',
         expect.objectContaining({ userId: TARGET_ID, type: 'new_like' }),
       );
-    });
 
-    it('does not consume quota when the like already exists', async () => {
-      // Only the caller's own like exists — there is no mutual like.
-      repos.Like.findOne.mockImplementation(async ({ where }: any) =>
-        where?.userId === ACTOR_ID && where?.likedUserId === TARGET_ID
-          ? { id: 'like-1', userId: ACTOR_ID, likedUserId: TARGET_ID }
-          : null,
+      eventEmitter.emit.mockClear();
+      existingLikeRows = [{ id: 'like-1' }];
+      await service.like(ACTOR_ID, TARGET_ID);
+      expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+        'notification.send',
+        expect.anything(),
       );
-      repos.DailyLike.findOne.mockResolvedValue({
-        id: 'dl-1',
-        userId: ACTOR_ID,
-        likesGiven: 10,
-        superLikesGiven: 0,
-      });
-
-      const result = await service.like(ACTOR_ID, TARGET_ID);
-
-      expect(result).toEqual(expect.objectContaining({ id: 'like-1' }));
-      expect(repos.DailyLike.increment).not.toHaveBeenCalled();
-      expect(repos.Like.save).not.toHaveBeenCalled();
-    });
-
-    it('rejects a new like once the daily limit is reached', async () => {
-      repos.DailyLike.findOne.mockResolvedValue({
-        id: 'dl-1',
-        userId: ACTOR_ID,
-        likesGiven: 10,
-        superLikesGiven: 0,
-      });
-
-      await expect(service.like(ACTOR_ID, TARGET_ID)).rejects.toBeInstanceOf(BadRequestException);
-      await expect(service.like(ACTOR_ID, TARGET_ID)).rejects.toThrow('10/10');
-      expect(repos.Like.save).not.toHaveBeenCalled();
     });
   });
 
@@ -301,19 +393,23 @@ describe('MatchingService swipe target validation (audit C5)', () => {
     it('rejects a target that does not exist', async () => {
       repos.User.find.mockResolvedValue([makeUser(ACTOR_ID)]);
       await expect(service.pass(ACTOR_ID, TARGET_ID)).rejects.toBeInstanceOf(NotFoundException);
-      expect(repos.Pass.save).not.toHaveBeenCalled();
+      expect(manager.query).not.toHaveBeenCalled();
     });
 
     it('rejects a blocked target', async () => {
       repos.Block.findOne.mockResolvedValue({ blockerId: TARGET_ID, blockedId: ACTOR_ID });
       await expect(service.pass(ACTOR_ID, TARGET_ID)).rejects.toBeInstanceOf(ForbiddenException);
-      expect(repos.Pass.save).not.toHaveBeenCalled();
+      expect(manager.query).not.toHaveBeenCalled();
     });
 
-    it('records a pass for a valid target', async () => {
+    it('records a pass idempotently', async () => {
       const result = await service.pass(ACTOR_ID, TARGET_ID);
       expect(result).toEqual({ passed: true });
-      expect(repos.Pass.save).toHaveBeenCalled();
+
+      const passCall = manager.query.mock.calls.find((c) =>
+        (c[0] as string).includes('INSERT INTO "passes"'),
+      );
+      expect(passCall?.[0]).toContain('ON CONFLICT DO NOTHING');
     });
   });
 
@@ -323,7 +419,7 @@ describe('MatchingService swipe target validation (audit C5)', () => {
       await expect(service.superlike(ACTOR_ID, TARGET_ID)).rejects.toBeInstanceOf(
         ForbiddenException,
       );
-      expect(repos.Like.save).not.toHaveBeenCalled();
+      expect(manager.query).not.toHaveBeenCalled();
     });
 
     it('rejects a malformed target id', async () => {
@@ -332,12 +428,27 @@ describe('MatchingService swipe target validation (audit C5)', () => {
       );
     });
 
-    it('records a super like for a valid target', async () => {
+    it('reserves the super like quota and inserts the like', async () => {
       const result = await service.superlike(ACTOR_ID, TARGET_ID);
       expect(result).toEqual({ superLiked: true, matched: false });
-      expect(repos.Like.create).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: ACTOR_ID, likedUserId: TARGET_ID, isSuperLike: true }),
+
+      const quotaCall = manager.query.mock.calls.find((c) =>
+        (c[0] as string).includes('INSERT INTO "daily_likes"'),
       );
+      expect(quotaCall?.[1]?.[2]).toBe(0); // likesGiven delta
+      expect(quotaCall?.[1]?.[3]).toBe(1); // superLikesGiven delta
+
+      const likeCall = manager.query.mock.calls.find((c) =>
+        (c[0] as string).includes('INSERT INTO "likes"'),
+      );
+      expect(likeCall?.[0]).toContain('true');
+    });
+
+    it('rejects when the super like limit is reached', async () => {
+      quotaRows = [];
+      currentCounterRows = [{ likesGiven: 0, superLikesGiven: 1 }];
+
+      await expect(service.superlike(ACTOR_ID, TARGET_ID)).rejects.toThrow('1/1');
     });
   });
 });

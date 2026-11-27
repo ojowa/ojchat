@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, MoreThan, LessThan, IsNull } from 'typeorm';
+import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
+import { Repository, In, MoreThan, LessThan, IsNull, DataSource, EntityManager } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   User,
@@ -71,6 +71,7 @@ export class MatchingService {
     @InjectRepository(Plan) private planRepo: Repository<Plan>,
     @InjectRepository(Subscription) private subscriptionRepo: Repository<Subscription>,
     @InjectRepository(Notification) private notifRepo: Repository<Notification>,
+    @InjectDataSource() private dataSource: DataSource,
     private readonly eventEmitter: EventEmitter2,
     private readonly matchmakingEngine: MatchmakingEngine,
     private readonly compatibilityEngine: CompatibilityEngine,
@@ -429,143 +430,211 @@ export class MatchingService {
     };
   }
 
+  /**
+   * Serialise concurrent swipes between the same two users.
+   *
+   * The mutual-like detection needs both like rows to be visible at the same
+   * time. Without a lock, A and B can each insert their like and each check
+   * for the other's like *before* the other side commits — both see a
+   * half-state, neither creates the match and the "It's a Match!" is silently
+   * lost. Locking both participant rows (in a deterministic order, so no
+   * deadlock) means the second transaction only proceeds once the first has
+   * committed, and therefore always sees both likes.
+   */
+  private async lockSwipeParticipants(
+    manager: EntityManager,
+    userId: string,
+    targetId: string,
+  ): Promise<void> {
+    await manager.query(
+      `SELECT "id" FROM "users" WHERE "id" IN ($1, $2) ORDER BY "id" FOR UPDATE`,
+      [userId, targetId],
+    );
+  }
+
+  /**
+   * Atomically reserve one unit of the daily swipe quota.
+   *
+   * The old implementation read the counter, compared it with the plan limit
+   * and incremented it in three separate statements: two concurrent swipes
+   * could both pass the check and both increment, so the plan limit was
+   * exceeded. Worse, the create-if-missing path raced on the
+   * (userId, date) uniqueness and produced an unhandled 500.
+   *
+   * This is a single statement: the row is created or updated, and the update
+   * only happens while the counter is still below the limit. When the limit
+   * is reached no row is returned and the caller gets a 400.
+   */
+  private async consumeSwipeQuota(
+    manager: EntityManager,
+    userId: string,
+    kind: 'like' | 'superlike',
+    limits: { dailyLikesLimit: number; dailySuperLikesLimit: number },
+  ): Promise<void> {
+    const today = new Date().toISOString().split('T')[0];
+    const likesDelta = kind === 'like' ? 1 : 0;
+    const superLikesDelta = kind === 'superlike' ? 1 : 0;
+
+    const rows = await manager.query(
+      `INSERT INTO "daily_likes" ("userId", date, "likesGiven", "superLikesGiven")
+       SELECT $1::varchar, $2::date, $3::int, $4::int
+       WHERE $3::int <= $5::int AND $4::int <= $6::int
+       ON CONFLICT ("userId", date) DO UPDATE
+         SET "likesGiven" = "daily_likes"."likesGiven" + EXCLUDED."likesGiven",
+             "superLikesGiven" = "daily_likes"."superLikesGiven" + EXCLUDED."superLikesGiven"
+       WHERE "daily_likes"."likesGiven" + EXCLUDED."likesGiven" <= $5::int
+         AND "daily_likes"."superLikesGiven" + EXCLUDED."superLikesGiven" <= $6::int
+       RETURNING "id", "likesGiven", "superLikesGiven"`,
+      [
+        userId,
+        today,
+        likesDelta,
+        superLikesDelta,
+        limits.dailyLikesLimit,
+        limits.dailySuperLikesLimit,
+      ],
+    );
+
+    if (!rows.length) {
+      const current = await manager.query(
+        `SELECT "likesGiven", "superLikesGiven" FROM "daily_likes" WHERE "userId" = $1 AND date = $2`,
+        [userId, today],
+      );
+      const likesGiven = current[0]?.likesGiven ?? 0;
+      const superLikesGiven = current[0]?.superLikesGiven ?? 0;
+
+      if (kind === 'superlike') {
+        throw new BadRequestException(
+          `Daily super like limit reached (${superLikesGiven}/${limits.dailySuperLikesLimit}). Upgrade your plan for more super likes.`,
+        );
+      }
+      throw new BadRequestException(
+        `Daily like limit reached (${likesGiven}/${limits.dailyLikesLimit}). Upgrade your plan for more likes.`,
+      );
+    }
+  }
+
+  /**
+   * Create the match between two users — atomically and at most once.
+   *
+   * The insert only happens when BOTH like rows exist, and it is a no-op when
+   * the match already exists (the canonical unique index turns the second
+   * concurrent insert into a no-op instead of a duplicate match row with a
+   * duplicate conversation and duplicate notifications).
+   */
+  private async createMatchIfMutual(
+    manager: EntityManager,
+    userAId: string,
+    userBId: string,
+  ): Promise<{ id: string; conversationId: string | null } | null> {
+    // Canonical order — the row is always stored with the smaller id first.
+    const [user1Id, user2Id] = userAId < userBId ? [userAId, userBId] : [userBId, userAId];
+
+    const rows = await manager.query(
+      `INSERT INTO "matches" ("user1Id", "user2Id", "matchedAt", "isActive", "matchedVia")
+       SELECT $1::varchar, $2::varchar, NOW(), true, 'like'
+       WHERE EXISTS (SELECT 1 FROM "likes" WHERE "userId" = $2::varchar AND "likedUserId" = $1::varchar)
+         AND EXISTS (SELECT 1 FROM "likes" WHERE "userId" = $1::varchar AND "likedUserId" = $2::varchar)
+       ON CONFLICT DO NOTHING
+       RETURNING "id", "conversationId"`,
+      [user1Id, user2Id],
+    );
+
+    return rows[0] ?? null;
+  }
+
   async like(likerId: string, likedId: string) {
     await this.validateSwipeTarget(likerId, likedId);
 
-    // Idempotency first: re-liking somebody who was already liked must not
-    // consume quota, and must not fail with "limit reached" when the user is
-    // already at their daily limit (the app retries likes after a flaky
-    // connection).
-    const existing = await this.likeRepo.findOne({
-      where: { userId: likerId, likedUserId: likedId },
-    });
-    if (existing) {
-      const mutual = await this.likeRepo.findOne({
-        where: { userId: likedId, likedUserId: likerId },
-      });
-      if (mutual) {
-        const alreadyMatched = await this.matchRepo.findOne({
-          where: [
-            { user1Id: likerId, user2Id: likedId, isActive: true },
-            { user1Id: likedId, user2Id: likerId, isActive: true },
-          ],
-        });
-        if (!alreadyMatched) {
-          const match = this.matchRepo.create({
-            user1Id: likerId,
-            user2Id: likedId,
-            matchedAt: new Date(),
-            isActive: true,
-          });
-          await this.matchRepo.save(match);
-          await this.enhancementService.updateEloOnMatch(likerId);
-          await this.enhancementService.updateEloOnMatch(likedId);
-          this.eventEmitter.emit('match.created', {
-            matchId: match.id,
-            user1Id: likerId,
-            user2Id: likedId,
-          });
-          const updatedMatch = await this.matchRepo.findOne({ where: { id: match.id } });
-          return {
-            liked: true,
-            matched: true,
-            matchId: match.id,
-            conversationId: updatedMatch?.conversationId,
-          };
-        }
-      }
-      return existing;
-    }
-
-    // Quota is only consumed by a NEW like.
-    const today = new Date().toISOString().split('T')[0];
-    let dailyLike = await this.dailyLikeRepo.findOne({
-      where: { userId: likerId, date: today as any },
-    });
     const planInfo = await this.getUserPlanInfo(likerId);
-    const likesGiven = dailyLike?.likesGiven ?? 0;
-    if (likesGiven >= planInfo.dailyLikesLimit) {
-      throw new BadRequestException(
-        `Daily like limit reached (${likesGiven}/${planInfo.dailyLikesLimit}). Upgrade your plan for more likes.`,
+
+    // Quota reservation, like insert and mutual-match detection happen in one
+    // transaction: either the swipe is recorded (and counted) or nothing
+    // happens. No read-then-write race, no lost match.
+    const outcome = await this.dataSource.transaction(async (manager) => {
+      await this.lockSwipeParticipants(manager, likerId, likedId);
+
+      const existing = await manager.query(
+        `SELECT "id" FROM "likes" WHERE "userId" = $1 AND "likedUserId" = $2`,
+        [likerId, likedId],
       );
-    }
-    if (!dailyLike) {
-      dailyLike = this.dailyLikeRepo.create({
-        userId: likerId,
-        date: today as any,
-        likesGiven: 0,
-        superLikesGiven: 0,
-      });
-      await this.dailyLikeRepo.save(dailyLike);
-    }
+      const isNewLike = existing.length === 0;
 
-    const like = this.likeRepo.create({ userId: likerId, likedUserId: likedId });
-    await this.likeRepo.save(like);
-    await this.dailyLikeRepo.increment({ id: dailyLike.id }, 'likesGiven', 1);
+      if (isNewLike) {
+        await this.consumeSwipeQuota(manager, likerId, 'like', planInfo);
+        await manager.query(
+          `INSERT INTO "likes" ("userId", "likedUserId", "isSuperLike", "createdAt")
+           VALUES ($1::varchar, $2::varchar, false, NOW())
+           ON CONFLICT DO NOTHING`,
+          [likerId, likedId],
+        );
+      }
 
-    const likedUser = await this.userRepo.findOne({ where: { id: likedId } });
-    try {
-      await this.enhancementService.trackBehavior({
-        userId: likerId,
-        targetUserId: likedId,
-        action: 'like',
-        targetAge: likedUser?.dateOfBirth
-          ? Math.floor(
-              (Date.now() - new Date(likedUser.dateOfBirth).getTime()) /
-                (365.25 * 24 * 60 * 60 * 1000),
-            )
-          : undefined,
-        targetGender: likedUser?.gender,
-      });
-    } catch (_) {}
-
-    const mutual = await this.likeRepo.findOne({
-      where: { userId: likedId, likedUserId: likerId },
+      const match = await this.createMatchIfMutual(manager, likerId, likedId);
+      return { isNewLike, match };
     });
-    if (mutual) {
-      const match = this.matchRepo.create({
-        user1Id: likerId,
-        user2Id: likedId,
-        matchedAt: new Date(),
-        isActive: true,
-      });
-      await this.matchRepo.save(match);
+
+    if (outcome.match) {
       await this.enhancementService.updateEloOnMatch(likerId);
       await this.enhancementService.updateEloOnMatch(likedId);
       this.eventEmitter.emit('match.created', {
-        matchId: match.id,
+        matchId: outcome.match.id,
         user1Id: likerId,
         user2Id: likedId,
       });
-      const updatedMatch = await this.matchRepo.findOne({ where: { id: match.id } });
+      const updatedMatch = await this.matchRepo.findOne({ where: { id: outcome.match.id } });
       return {
         liked: true,
         matched: true,
-        matchId: match.id,
+        matchId: outcome.match.id,
         conversationId: updatedMatch?.conversationId,
       };
     }
-    this.eventEmitter.emit('user.liked', { likerId, likedId });
-    const liker = await this.userRepo.findOne({ where: { id: likerId } });
-    this.eventEmitter.emit('notification.send', {
-      userId: likedId,
-      type: 'new_like',
-      title: 'New Like',
-      body: `${liker?.fullName || 'Someone'} liked your profile`,
-      data: { likerId },
-    });
+
+    if (outcome.isNewLike) {
+      const likedUser = await this.userRepo.findOne({ where: { id: likedId } });
+      try {
+        await this.enhancementService.trackBehavior({
+          userId: likerId,
+          targetUserId: likedId,
+          action: 'like',
+          targetAge: likedUser?.dateOfBirth
+            ? Math.floor(
+                (Date.now() - new Date(likedUser.dateOfBirth).getTime()) /
+                  (365.25 * 24 * 60 * 60 * 1000),
+              )
+            : undefined,
+          targetGender: likedUser?.gender,
+        });
+      } catch (_) {}
+
+      this.eventEmitter.emit('user.liked', { likerId, likedId });
+      const liker = await this.userRepo.findOne({ where: { id: likerId } });
+      this.eventEmitter.emit('notification.send', {
+        userId: likedId,
+        type: 'new_like',
+        title: 'New Like',
+        body: `${liker?.fullName || 'Someone'} liked your profile`,
+        data: { likerId },
+      });
+    }
+
     return { liked: true, matched: false };
   }
 
   async pass(passerId: string, passedId: string) {
     await this.validateSwipeTarget(passerId, passedId);
 
-    const existing = await this.passRepo.findOne({
-      where: { userId: passerId, passedUserId: passedId },
+    // Idempotent insert — the unique index on (userId, passedUserId) turns a
+    // duplicate pass into a no-op instead of a unique-violation error.
+    await this.dataSource.transaction(async (manager) => {
+      await manager.query(
+        `INSERT INTO "passes" ("userId", "passedUserId", "createdAt")
+         VALUES ($1::varchar, $2::varchar, NOW())
+         ON CONFLICT DO NOTHING`,
+        [passerId, passedId],
+      );
     });
-    if (existing) return existing;
-    const pass = this.passRepo.create({ userId: passerId, passedUserId: passedId });
-    await this.passRepo.save(pass);
 
     const passedUser = await this.userRepo.findOne({ where: { id: passedId } });
     await this.enhancementService.trackBehavior({
@@ -587,127 +656,95 @@ export class MatchingService {
   async superlike(likerId: string, likedId: string) {
     await this.validateSwipeTarget(likerId, likedId);
 
-    // Idempotency first (see like()): an existing like must not consume quota.
-    const existing = await this.likeRepo.findOne({
-      where: { userId: likerId, likedUserId: likedId },
-    });
-    if (existing) {
-      const mutual = await this.likeRepo.findOne({
-        where: { userId: likedId, likedUserId: likerId },
-      });
-      if (mutual) {
-        const alreadyMatched = await this.matchRepo.findOne({
-          where: [
-            { user1Id: likerId, user2Id: likedId, isActive: true },
-            { user1Id: likedId, user2Id: likerId, isActive: true },
-          ],
-        });
-        if (!alreadyMatched) {
-          const match = this.matchRepo.create({
-            user1Id: likerId,
-            user2Id: likedId,
-            matchedAt: new Date(),
-            isActive: true,
-          });
-          await this.matchRepo.save(match);
-          await this.enhancementService.updateEloOnMatch(likerId);
-          await this.enhancementService.updateEloOnMatch(likedId);
-          this.eventEmitter.emit('match.created', {
-            matchId: match.id,
-            user1Id: likerId,
-            user2Id: likedId,
-          });
-          const updatedMatch = await this.matchRepo.findOne({ where: { id: match.id } });
-          return {
-            superLiked: true,
-            matched: true,
-            matchId: match.id,
-            conversationId: updatedMatch?.conversationId,
-          };
-        }
-      }
-      return existing;
-    }
-
-    // Quota is only consumed by a NEW super like.
-    const today = new Date().toISOString().split('T')[0];
-    let dailyLike = await this.dailyLikeRepo.findOne({
-      where: { userId: likerId, date: today as any },
-    });
     const planInfo = await this.getUserPlanInfo(likerId);
-    const superLikesGiven = dailyLike?.superLikesGiven ?? 0;
-    if (superLikesGiven >= planInfo.dailySuperLikesLimit) {
-      throw new BadRequestException(
-        `Daily super like limit reached (${superLikesGiven}/${planInfo.dailySuperLikesLimit}). Upgrade your plan for more super likes.`,
+
+    // Same transactional flow as like() — see the comment there.
+    const outcome = await this.dataSource.transaction(async (manager) => {
+      await this.lockSwipeParticipants(manager, likerId, likedId);
+
+      const existing = await manager.query(
+        `SELECT "id" FROM "likes" WHERE "userId" = $1 AND "likedUserId" = $2`,
+        [likerId, likedId],
       );
-    }
-    if (!dailyLike) {
-      dailyLike = this.dailyLikeRepo.create({
-        userId: likerId,
-        date: today as any,
-        likesGiven: 0,
-        superLikesGiven: 0,
-      });
-      await this.dailyLikeRepo.save(dailyLike);
-    }
+      const isNewLike = existing.length === 0;
 
-    const like = this.likeRepo.create({ userId: likerId, likedUserId: likedId, isSuperLike: true });
-    await this.likeRepo.save(like);
-    await this.dailyLikeRepo.increment({ id: dailyLike.id }, 'superLikesGiven', 1);
+      if (isNewLike) {
+        await this.consumeSwipeQuota(manager, likerId, 'superlike', planInfo);
+        await manager.query(
+          `INSERT INTO "likes" ("userId", "likedUserId", "isSuperLike", "createdAt")
+           VALUES ($1::varchar, $2::varchar, true, NOW())
+           ON CONFLICT DO NOTHING`,
+          [likerId, likedId],
+        );
+      }
 
-    const likedUser = await this.userRepo.findOne({ where: { id: likedId } });
-    try {
-      await this.enhancementService.trackBehavior({
-        userId: likerId,
-        targetUserId: likedId,
-        action: 'super_like',
-        targetAge: likedUser?.dateOfBirth
-          ? Math.floor(
-              (Date.now() - new Date(likedUser.dateOfBirth).getTime()) /
-                (365.25 * 24 * 60 * 60 * 1000),
-            )
-          : undefined,
-        targetGender: likedUser?.gender,
-      });
-    } catch (_) {}
-
-    const mutual = await this.likeRepo.findOne({
-      where: { userId: likedId, likedUserId: likerId },
+      const match = await this.createMatchIfMutual(manager, likerId, likedId);
+      return { isNewLike, match };
     });
-    if (mutual) {
-      const match = this.matchRepo.create({
-        user1Id: likerId,
-        user2Id: likedId,
-        matchedAt: new Date(),
-        isActive: true,
-      });
-      await this.matchRepo.save(match);
+
+    if (outcome.match) {
       await this.enhancementService.updateEloOnMatch(likerId);
       await this.enhancementService.updateEloOnMatch(likedId);
       this.eventEmitter.emit('match.created', {
-        matchId: match.id,
+        matchId: outcome.match.id,
         user1Id: likerId,
         user2Id: likedId,
       });
-      const updatedMatch = await this.matchRepo.findOne({ where: { id: match.id } });
+      const updatedMatch = await this.matchRepo.findOne({ where: { id: outcome.match.id } });
       return {
         superLiked: true,
         matched: true,
-        matchId: match.id,
+        matchId: outcome.match.id,
         conversationId: updatedMatch?.conversationId,
       };
     }
 
-    this.eventEmitter.emit('user.super_liked', { likerId, likedId });
-    const superLiker = await this.userRepo.findOne({ where: { id: likerId } });
-    this.eventEmitter.emit('notification.send', {
-      userId: likedId,
-      type: 'super_like',
-      title: 'Super Like!',
-      body: `${superLiker?.fullName || 'Someone'} super liked you!`,
-      data: { likerId },
-    });
+    if (outcome.isNewLike) {
+      const likedUser = await this.userRepo.findOne({ where: { id: likedId } });
+      try {
+        await this.enhancementService.trackBehavior({
+          userId: likerId,
+          targetUserId: likedId,
+          action: 'super_like',
+          targetAge: likedUser?.dateOfBirth
+            ? Math.floor(
+                (Date.now() - new Date(likedUser.dateOfBirth).getTime()) /
+                  (365.25 * 24 * 60 * 60 * 1000),
+              )
+            : undefined,
+          targetGender: likedUser?.gender,
+        });
+      } catch (_) {}
+
+      this.eventEmitter.emit('user.super_liked', { likerId, likedId });
+      const superLiker = await this.userRepo.findOne({ where: { id: likerId } });
+      this.eventEmitter.emit('notification.send', {
+        userId: likedId,
+        type: 'super_like',
+        title: 'Super Like!',
+        body: `${superLiker?.fullName || 'Someone'} super liked you!`,
+        data: { likerId },
+      });
+    }
+
     return { superLiked: true, matched: false };
+  }
+
+  /**
+   * Give one unit of quota back (undo / rewind). The counter can never go
+   * below zero — a blind decrement could otherwise hand out free likes.
+   */
+  private async decrementSwipeCounter(
+    userId: string,
+    date: string,
+    column: 'likesGiven' | 'superLikesGiven',
+  ): Promise<void> {
+    await this.dataSource.query(
+      `UPDATE "daily_likes"
+       SET "${column}" = GREATEST(0, "${column}" - 1)
+       WHERE "userId" = $1 AND date = $2`,
+      [userId, date],
+    );
   }
 
   async undo(userId: string) {
@@ -724,19 +761,11 @@ export class MatchingService {
 
     if (lastLike && (!lastPass || lastLike.createdAt > lastPass.createdAt)) {
       await this.likeRepo.remove(lastLike);
-      if (lastLike.isSuperLike) {
-        await this.dailyLikeRepo.decrement(
-          { userId, date: lastLike.createdAt.toISOString().split('T')[0] } as any,
-          'superLikesGiven',
-          1,
-        );
-      } else {
-        await this.dailyLikeRepo.decrement(
-          { userId, date: lastLike.createdAt.toISOString().split('T')[0] } as any,
-          'likesGiven',
-          1,
-        );
-      }
+      await this.decrementSwipeCounter(
+        userId,
+        lastLike.createdAt.toISOString().split('T')[0],
+        lastLike.isSuperLike ? 'superLikesGiven' : 'likesGiven',
+      );
       return { undone: true, action: 'like' };
     }
 
@@ -786,15 +815,11 @@ export class MatchingService {
         if (like) {
           await this.likeRepo.remove(like);
           const dateStr = like.createdAt.toISOString().split('T')[0];
-          if (like.isSuperLike) {
-            await this.dailyLikeRepo.decrement(
-              { userId, date: dateStr } as any,
-              'superLikesGiven',
-              1,
-            );
-          } else {
-            await this.dailyLikeRepo.decrement({ userId, date: dateStr } as any, 'likesGiven', 1);
-          }
+          await this.decrementSwipeCounter(
+            userId,
+            dateStr,
+            like.isSuperLike ? 'superLikesGiven' : 'likesGiven',
+          );
           likesRemoved++;
         }
       } else {
