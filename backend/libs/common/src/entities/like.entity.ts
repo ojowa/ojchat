@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 
 @Entity('likes')
-@Index('IDX_likes_user_liked', { unique: true })
+@Index('IDX_likes_user_liked', ['userId', 'likedUserId'], { unique: true })
 export class Like {
   @PrimaryGeneratedColumn('uuid') id: string;
   @Column() userId: string;

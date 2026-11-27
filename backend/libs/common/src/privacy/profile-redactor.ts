@@ -55,6 +55,39 @@ export function distanceBucket(distanceKm?: number | null): string | null {
   return '200+ km';
 }
 
+/**
+ * Great-circle distance in kilometres.
+ *
+ * The *filtering* happens in the database (`ST_DWithin` on an indexed
+ * geography column); this is only used to turn the already-filtered page into
+ * a coarse bucket for the UI — never to decide who a user may see.
+ */
+export function haversineDistanceKm(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number | null {
+  if (
+    !Number.isFinite(lat1) ||
+    !Number.isFinite(lon1) ||
+    !Number.isFinite(lat2) ||
+    !Number.isFinite(lon2)
+  ) {
+    return null;
+  }
+
+  const R = 6371;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 export interface RedactedInterest {
   id: string;
   name: string;
@@ -84,6 +117,8 @@ export interface RedactedProfile {
   isActive: boolean;
   /** Whole-year age derived server-side. The exact DOB is never exposed. */
   age: number | null;
+  /** Coarse distance bucket (e.g. "1-5 km"). Never an exact distance. */
+  distance?: string | null;
   prompts: Array<{ question: string; answer: string }>;
   company?: string | null;
   school?: string | null;
@@ -99,6 +134,8 @@ export interface RedactProfileOptions {
    * view — never for bulk feed payloads.
    */
   includeEmployment?: boolean;
+  /** Coarse distance bucket. Exact coordinates/precision are never exposed. */
+  distance?: string | null;
 }
 
 /**
@@ -127,6 +164,7 @@ export function redactProfile(
     completionPercentage: profile.completionPercentage ?? 0,
     isActive: profile.isActive !== false,
     age: calculateAge(profile.dateOfBirth),
+    distance: options.distance ?? null,
     prompts: profile.prompts ?? [],
   };
 

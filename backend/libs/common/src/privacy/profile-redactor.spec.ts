@@ -1,6 +1,7 @@
 import {
   calculateAge,
   distanceBucket,
+  haversineDistanceKm,
   NEVER_EXPOSE_PROFILE_FIELDS,
   redactProfile,
   redactUserSummary,
@@ -129,5 +130,44 @@ describe('distanceBucket', () => {
   it('returns null for unknown distance', () => {
     expect(distanceBucket(null)).toBeNull();
     expect(distanceBucket(undefined)).toBeNull();
+  });
+});
+
+describe('haversineDistanceKm', () => {
+  it('returns 0 for the same point', () => {
+    expect(haversineDistanceKm(6.5244, 3.3792, 6.5244, 3.3792)).toBeCloseTo(0, 5);
+  });
+
+  it('measures a known short distance', () => {
+    // ~20 km north of Lagos
+    const km = haversineDistanceKm(6.5244, 3.3792, 6.7, 3.38);
+    expect(km).toBeGreaterThan(15);
+    expect(km).toBeLessThan(25);
+  });
+
+  it('measures a long distance', () => {
+    // Lagos -> Abuja is roughly 500 km
+    const km = haversineDistanceKm(6.5244, 3.3792, 9.0765, 7.3986);
+    expect(km).toBeGreaterThan(450);
+    expect(km).toBeLessThan(550);
+  });
+
+  it('returns null for non-numeric input', () => {
+    expect(haversineDistanceKm(NaN, 3.3792, 6.5244, 3.3792)).toBeNull();
+    expect(haversineDistanceKm(6.5244, 3.3792, undefined as any, 3.3792)).toBeNull();
+  });
+});
+
+describe('redactProfile distance', () => {
+  it('exposes only the coarse bucket', () => {
+    const profile = makeProfile();
+    const redacted = redactProfile(profile, { distance: distanceBucket(20) });
+    expect(redacted.distance).toBe('10-25 km');
+    expect(redacted).not.toHaveProperty('latitude');
+    expect(redacted).not.toHaveProperty('longitude');
+  });
+
+  it('defaults the distance to null when it is unknown', () => {
+    expect(redactProfile(makeProfile()).distance).toBeNull();
   });
 });

@@ -24,7 +24,7 @@ import {
   Notification,
   UserStatus,
 } from '@app/common/entities';
-import { redactProfile, redactUserSummary } from '@app/common/privacy';
+import { redactProfile, redactUserSummary, distanceBucket, haversineDistanceKm } from '@app/common/privacy';
 import { MatchmakingEngine } from './ai/matchmaking.engine';
 import { CompatibilityEngine } from './ai/compatibility.engine';
 import { ScamDetector } from './ai/scam.detector';
@@ -202,13 +202,60 @@ export class MatchingService {
     const maxDobStr = `${now.getFullYear() - ageMin}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const minDobStr = `${now.getFullYear() - ageMax - 1}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
+    // ---------------------------------------------------------------------
+    // Distance origin (audit C3 + B5)
+    //
+    // The radius is measured from where the user is browsing from: the
+    // passport location while passport mode is on, otherwise their own
+    // profile location. `globalDiscovery` is the explicit opt-out ("show me
+    // everyone"), so no radius is applied for those users.
+    // ---------------------------------------------------------------------
+    const myProfile = await this.profileRepo.findOne({ where: { userId } });
+
+    const passportOrigin =
+      pref?.passportEnabled &&
+      pref.passportLatitude != null &&
+      pref.passportLongitude != null
+        ? { lat: Number(pref.passportLatitude), lng: Number(pref.passportLongitude) }
+        : null;
+
+    const profileOrigin =
+      myProfile?.latitude != null && myProfile?.longitude != null
+        ? { lat: Number(myProfile.latitude), lng: Number(myProfile.longitude) }
+        : null;
+
+    const distanceOrigin = passportOrigin ?? profileOrigin;
+    const radiusKm = Number(pref?.maxDistanceKm ?? 50);
+    const applyDistanceFilter =
+      !!distanceOrigin && !pref?.globalDiscovery && Number.isFinite(radiusKm) && radiusKm > 0;
+
     let qb = this.userRepo
       .createQueryBuilder('u')
+      // Every feed candidate needs a profile row (it carries the location,
+      // photos and interests), so join it up front instead of loading users
+      // first and discarding them in JS.
+      .innerJoin(Profile, 'p', 'p."userId" = u.id AND p."isActive" = true')
       .where('u.id NOT IN (:...excludeIds)', { excludeIds })
       .andWhere('u.status = :status', { status: 'active' })
       .andWhere('u.dateOfBirth <= :maxDob', { maxDob: maxDobStr })
       .andWhere('u.dateOfBirth >= :minDob', { minDob: minDobStr })
       .andWhere('u.incognitoMode = :incognito', { incognito: false });
+
+    // The distance preference used to be ignored entirely — users saw (and
+    // were seen by) people outside their radius. `ST_DWithin` is an indexed
+    // pre-filter on the GIST index over profiles.location.
+    // Candidates who never shared a location are kept (their distance is
+    // simply unknown) instead of silently disappearing from every feed.
+    if (applyDistanceFilter && distanceOrigin) {
+      qb = qb.andWhere(
+        `(p."location" IS NULL OR ST_DWithin(p."location", ST_SetSRID(ST_MakePoint(:originLng, :originLat), 4326)::geography, :radiusMeters))`,
+        {
+          originLng: distanceOrigin.lng,
+          originLat: distanceOrigin.lat,
+          radiusMeters: radiusKm * 1000,
+        },
+      );
+    }
 
     if (pref?.showMe && pref.showMe !== 'everyone') {
       qb = qb.andWhere('u.gender = :gender', { gender: pref.showMe });
@@ -261,14 +308,27 @@ export class MatchingService {
     }
 
     if (pref?.passportEnabled && pref.passportLatitude != null && pref.passportLongitude != null) {
-      qb = qb.orderBy(
-        `ST_Distance(
-          ST_SetSRID(ST_MakePoint(u.longitude, u.latitude), 4326)::geography,
-          ST_SetSRID(ST_MakePoint(:passportLng, :passportLat), 4326)::geography
-        )`,
-        'ASC',
-      );
-      qb.setParameters({ passportLng: pref.passportLongitude, passportLat: pref.passportLatitude });
+      // The location lives on `profiles`, not on `users` — the old query used
+      // `u.longitude`/`u.latitude`, which does not exist and made every
+      // passport-enabled feed request fail with a 500.
+      //
+      // The expression is selected under an alias and ordered by that alias:
+      // TypeORM resolves a raw ORDER BY expression as `alias.property`, which
+      // fails for a function call — and it breaks the paginated "distinct ids"
+      // query TypeORM builds for joins.
+      qb = qb
+        .addSelect(
+          `ST_Distance(
+            p."location",
+            ST_SetSRID(ST_MakePoint(:passportLng, :passportLat), 4326)::geography
+          )`,
+          'passport_distance',
+        )
+        .orderBy('passport_distance', 'ASC');
+      qb.setParameters({
+        passportLng: Number(pref.passportLongitude),
+        passportLat: Number(pref.passportLatitude),
+      });
     }
 
     const activeBoost = await this.boostRepo.findOne({
@@ -318,10 +378,9 @@ export class MatchingService {
         ? await this.interestRepo.find({ where: { id: In(interestIds) } })
         : [];
 
-    const myProfileRecord = await this.profileRepo.findOne({ where: { userId } });
     const myInterestIds = new Set(
       profileInterests
-        .filter((pi) => pi.profileId === myProfileRecord?.id)
+        .filter((pi) => pi.profileId === myProfile?.id)
         .map((pi) => pi.interestId),
     );
 
@@ -349,6 +408,21 @@ export class MatchingService {
         const profile = profileMap.get(u.id);
         const profilePhotos = profile ? photoMap.get(profile.id) || [] : [];
         const profileInterestsList = profile ? interestMap.get(profile.id) || [] : [];
+
+        // The radius was already enforced by the database; this only turns the
+        // already-filtered page into a coarse bucket for the UI.
+        const distanceKm =
+          distanceOrigin &&
+          profile?.latitude != null &&
+          profile?.longitude != null
+            ? haversineDistanceKm(
+                distanceOrigin.lat,
+                distanceOrigin.lng,
+                Number(profile.latitude),
+                Number(profile.longitude),
+              )
+            : null;
+
         return {
           // Privacy (C2): the client gets age, never the exact date of birth,
           // and never the raw profile entity (which carries exact GPS
@@ -358,6 +432,7 @@ export class MatchingService {
             ? redactProfile(profile, {
                 photos: profilePhotos,
                 interests: profileInterestsList,
+                distance: distanceBucket(distanceKm),
               })
             : null,
         };

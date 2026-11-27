@@ -9,6 +9,12 @@ export interface Profile {
    * of birth for other users, so age is the only age signal available here.
    */
   age?: number | null;
+  /**
+   * Coarse distance bucket (e.g. "1-5 km") for other users. The backend
+   * enforces the distance preference in the database and only ever exposes a
+   * bucket — never coordinates or an exact distance.
+   */
+  distance?: string | null;
   /** Only present for the signed-in user's own profile / local cache. */
   dateOfBirth?: string;
   gender?: string;

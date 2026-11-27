@@ -71,6 +71,50 @@ const repoMock = () => ({
   update: jest.fn().mockResolvedValue({ affected: 1 }),
 });
 
+/** Chainable TypeORM query-builder mock that records every fragment. */
+const qbMock = (entities: any[] = []) => {
+  const calls: {
+    where: Array<[string, any?]>;
+    andWhere: Array<[string, any?]>;
+    orderBy: Array<[string, string?]>;
+    innerJoin: any[][];
+    addSelect: Array<[string, string?]>;
+    setParameters: any[];
+  } = { where: [], andWhere: [], orderBy: [], innerJoin: [], addSelect: [], setParameters: [] };
+
+  const qb: any = {
+    calls,
+    where: jest.fn((sql: string, params?: any) => {
+      calls.where.push([sql, params]);
+      return qb;
+    }),
+    andWhere: jest.fn((sql: string, params?: any) => {
+      calls.andWhere.push([sql, params]);
+      return qb;
+    }),
+    orderBy: jest.fn((sql: string, dir?: string) => {
+      calls.orderBy.push([sql, dir]);
+      return qb;
+    }),
+    innerJoin: jest.fn((...args: any[]) => {
+      calls.innerJoin.push(args);
+      return qb;
+    }),
+    addSelect: jest.fn((sql: string, alias?: string) => {
+      calls.addSelect.push([sql, alias]);
+      return qb;
+    }),
+    setParameters: jest.fn((params: any) => {
+      calls.setParameters.push(params);
+      return qb;
+    }),
+    skip: jest.fn(() => qb),
+    take: jest.fn(() => qb),
+    getMany: jest.fn(async () => entities),
+  };
+  return qb;
+};
+
 describe('MatchingService swipe target validation (audit C5) + atomic swipes (C4)', () => {
   let service: MatchingService;
   let repos: Record<string, any>;
@@ -449,6 +493,154 @@ describe('MatchingService swipe target validation (audit C5) + atomic swipes (C4
       currentCounterRows = [{ likesGiven: 0, superLikesGiven: 1 }];
 
       await expect(service.superlike(ACTOR_ID, TARGET_ID)).rejects.toThrow('1/1');
+    });
+  });
+
+  describe('getFeed() — distance filter (audit C3 + B5)', () => {
+    const ORIGIN = { lat: 6.5244, lng: 3.3792 }; // Lagos
+
+    let qb: ReturnType<typeof qbMock>;
+
+    const distanceClause = () =>
+      qb.calls.andWhere.find(([sql]: [string, any?]) => sql.includes('ST_DWithin'));
+
+    beforeEach(() => {
+      qb = qbMock([makeUser(TARGET_ID)]);
+      repos.User.createQueryBuilder = jest.fn(() => qb);
+
+      // The viewer's own profile (the origin of the radius).
+      repos.Profile.findOne.mockResolvedValue(
+        makeProfile(ACTOR_ID, { latitude: ORIGIN.lat, longitude: ORIGIN.lng }),
+      );
+      // The candidate's profile.
+      repos.Profile.find.mockResolvedValue([
+        makeProfile(TARGET_ID, { latitude: 6.7, longitude: 3.38 }), // ~20 km away
+      ]);
+    });
+
+    it('enforces the distance preference with an indexed ST_DWithin filter', async () => {
+      repos.UserPreference.findOne.mockResolvedValue({
+        userId: ACTOR_ID,
+        ageMin: 18,
+        ageMax: 50,
+        maxDistanceKm: 25,
+        showMe: 'everyone',
+        globalDiscovery: false,
+      });
+
+      await service.getFeed(ACTOR_ID);
+
+      const clause = distanceClause();
+      expect(clause).toBeDefined();
+      expect(clause?.[0]).toContain('ST_DWithin');
+      // The radius is handed to the database in metres.
+      expect(clause?.[1]).toMatchObject({
+        originLat: ORIGIN.lat,
+        originLng: ORIGIN.lng,
+        radiusMeters: 25_000,
+      });
+    });
+
+    it('joins the profile so the location is available to the filter', async () => {
+      repos.UserPreference.findOne.mockResolvedValue({
+        userId: ACTOR_ID,
+        maxDistanceKm: 25,
+        showMe: 'everyone',
+      });
+
+      await service.getFeed(ACTOR_ID);
+
+      expect(qb.calls.innerJoin.length).toBeGreaterThan(0);
+      const [entity, alias, condition] = qb.calls.innerJoin[0];
+      expect(entity).toBe(Profile);
+      expect(alias).toBe('p');
+      expect(condition).toContain('u.id');
+    });
+
+    it('does not filter by distance when the user opted into global discovery', async () => {
+      repos.UserPreference.findOne.mockResolvedValue({
+        userId: ACTOR_ID,
+        maxDistanceKm: 25,
+        showMe: 'everyone',
+        globalDiscovery: true,
+      });
+
+      await service.getFeed(ACTOR_ID);
+
+      expect(distanceClause()).toBeUndefined();
+    });
+
+    it('does not filter by distance when the viewer has no location', async () => {
+      repos.Profile.findOne.mockResolvedValue(makeProfile(ACTOR_ID));
+      repos.UserPreference.findOne.mockResolvedValue({
+        userId: ACTOR_ID,
+        maxDistanceKm: 25,
+        showMe: 'everyone',
+      });
+
+      await service.getFeed(ACTOR_ID);
+
+      expect(distanceClause()).toBeUndefined();
+    });
+
+    it('measures the radius from the passport location while passport mode is on', async () => {
+      repos.UserPreference.findOne.mockResolvedValue({
+        userId: ACTOR_ID,
+        maxDistanceKm: 25,
+        showMe: 'everyone',
+        passportEnabled: true,
+        passportLatitude: 9.0765,
+        passportLongitude: 7.3986,
+      });
+
+      await service.getFeed(ACTOR_ID);
+
+      expect(distanceClause()?.[1]).toMatchObject({
+        originLat: 9.0765,
+        originLng: 7.3986,
+      });
+    });
+
+    it('orders by distance to the passport using the profile location', async () => {
+      repos.UserPreference.findOne.mockResolvedValue({
+        userId: ACTOR_ID,
+        showMe: 'everyone',
+        passportEnabled: true,
+        passportLatitude: 9.0765,
+        passportLongitude: 7.3986,
+      });
+
+      await service.getFeed(ACTOR_ID);
+
+      // The expression is selected under an alias and ordered by that alias:
+      // TypeORM resolves a raw ORDER BY expression as `alias.property`, which
+      // fails for a function call.
+      const [expression, alias] = qb.calls.addSelect[0];
+      expect(expression).toContain('ST_Distance');
+      // `users` has no latitude/longitude columns — the old query used
+      // u.longitude/u.latitude and made every passport feed request fail.
+      expect(expression).toContain('p."location"');
+      expect(expression).not.toContain('u.longitude');
+      expect(expression).not.toContain('u.latitude');
+      expect(alias).toBe('passport_distance');
+      expect(qb.calls.orderBy[0]?.[0]).toBe('passport_distance');
+      expect(qb.calls.orderBy[0]?.[1]).toBe('ASC');
+    });
+
+    it('returns a coarse distance bucket and never the exact coordinates', async () => {
+      repos.UserPreference.findOne.mockResolvedValue({
+        userId: ACTOR_ID,
+        maxDistanceKm: 50,
+        showMe: 'everyone',
+      });
+
+      const result = await service.getFeed(ACTOR_ID);
+
+      expect(result.candidates).toHaveLength(1);
+      const profile = result.candidates[0].profile;
+      expect(profile?.distance).toBe('10-25 km');
+      expect(profile).not.toHaveProperty('latitude');
+      expect(profile).not.toHaveProperty('longitude');
     });
   });
 });

@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 
 @Entity('blocks')
-@Index('IDX_blocks_users', { unique: true })
+@Index('IDX_blocks_users', ['blockerId', 'blockedId'], { unique: true })
 export class Block {
   @PrimaryGeneratedColumn('uuid') id: string;
   @Column() blockerId: string;

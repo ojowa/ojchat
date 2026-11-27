@@ -24,6 +24,22 @@ export class Profile {
   @Column({ nullable: true }) school: string;
   @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true }) latitude: number;
   @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true }) longitude: number;
+  /**
+   * PostGIS point derived from latitude/longitude by a database trigger.
+   *
+   * This is the column the feed filters on (`ST_DWithin`) and it carries a
+   * GIST index. It is never selected by default (`select: false`) so a raw
+   * entity can never leak it into a response — the client only ever receives
+   * a coarse distance bucket.
+   */
+  @Column({
+    type: 'geography',
+    spatialFeatureType: 'Point',
+    srid: 4326,
+    nullable: true,
+    select: false,
+  })
+  location: string | null;
   @Column({ nullable: true }) city: string;
   @Column({ nullable: true }) country: string;
   @Column({ nullable: true }) relationshipGoal: string;

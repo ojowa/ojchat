@@ -259,7 +259,7 @@ Make `@OnEvent` handlers run via an outbox/queue (BullMQ + Redis, or at minimum 
 | 2 | ✅ **DONE** (`63b3e45`) | 🔴 **P0 — today** | Stop leaking `latitude`/`longitude`/exact DOB in `getFeed` + AI feed (§4.7) | 1h |
 | 3 | ✅ **DONE** | 🔴 **P0 — this week** | Add block/existence/target-visibility checks to `like/pass/superlike` (C5) | 2h |
 | 4 | ✅ **DONE** | 🔴 **P0 — this week** | Canonical match upsert + partial unique index + transaction (§4.2); atomic daily counters (§4.3) | 3h |
-| 5 | ⬜ TODO | 🟠 **P1** | PostGIS migration + `ST_DWithin` distance filter in `getFeed` — fixes C3 + B5 together (§4.4). Verify/enable `postgis` extension first (passport query already assumes it) | 4h |
+| 5 | ✅ **DONE** | 🟠 **P1** | PostGIS migration + `ST_DWithin` distance filter in `getFeed` — fixes C3 + B5 together (§4.4). Verify/enable `postgis` extension first (passport query already assumes it) | 4h |
 | 6 | ⬜ TODO | 🟠 **P1** | Replace in-memory exclusion arrays & `IN(allIds)` with `NOT EXISTS`/`EXISTS` anti-joins (§4.5); add missing indexes | 4h |
 | 7 | ⬜ TODO | 🟠 **P1** | Redis deck cache with stale-queue invalidation on block/delete/match (§4.8) | 2–3d |
 | 8 | ⬜ TODO | 🟡 **P2** | Move compatibility scoring + Elo off the request path; async side effects via queue (§4.9) | 2d |
@@ -316,5 +316,39 @@ Make `@OnEvent` handlers run via an outbox/queue (BullMQ + Redis, or at minimum 
   - 10 concurrent likes against 10 different targets with a limit of 5 → **exactly 5** likes recorded and 5 refused, one counter row,
   - 10 concurrent identical likes → **one** like row.
 - 24 tests in `matching.service.spec.ts` (validation + transactional behaviour).
+
+**Fix #5 — PostGIS + hard distance filtering (C3 + B5)**
+
+*The live database was inspected first, and three latent production bugs turned up:*
+
+1. **The `postgis` extension was not installed** (it was available: 3.5.7). Every PostGIS function call failed with `type "geography" does not exist` — so the feed's passport ordering was a **live 500** for every user with passport mode enabled, and a fresh database would have failed the same way (no migration created the extension).
+2. **`users` has no `latitude`/`longitude` columns at all** — location lives on `profiles`. The passport ordering ordered by `u.longitude`/`u.latitude`, a second independent error (`column u.longitude does not exist`).
+3. **The distance preference was never enforced** — `user_preferences.maxDistanceKm` (default 50) was only read by the AI candidate generator, which the app does not call. Users saw, and were seen by, people outside their radius (C3).
+
+- **Migration `1795740000000-PostGISLocationAndFeedIndexes`** (applied to the live DB):
+  - installs PostGIS explicitly into `public` (`CREATE EXTENSION … SCHEMA public`) so the unqualified `geography` type and the `ST_*` functions resolve with the app's search_path (`"$user", public`) — PostGIS' default schema is not in it;
+  - adds `profiles.location geography(Point, 4326)`, backfilled from the existing latitude/longitude columns;
+  - adds a **BEFORE INSERT/UPDATE trigger** that keeps `location` in sync, so a user who moves is re-indexed automatically instead of silently going stale;
+  - adds the **GIST spatial index** `IDX_profiles_location_gist` — this is what makes `ST_DWithin` an indexed pre-filter instead of a table scan;
+  - adds the supporting feed indexes: `IDX_users_feed` (partial, on the exact rows the feed scans), `IDX_blocks_blocked` (the reverse-direction block lookup had no usable index), `IDX_profiles_verified`, `IDX_profiles_relationship_goal`, `IDX_photos_profile`.
+- **Service (`getFeed`)**:
+  - joins `profiles` up front (the feed candidate *is* a profile row — this also stops the page from wasting slots on users that are discarded in JS);
+  - enforces the radius in the database: `ST_DWithin(p.location, <origin>, maxDistanceKm * 1000)`. The origin is where the user is browsing from — the passport location while passport mode is on, otherwise their own profile location. `globalDiscovery` is the explicit opt-out ("show me everyone"), so no radius is applied for those users;
+  - candidates who never shared a location are **kept** (their distance is simply unknown) rather than silently disappearing from every feed;
+  - fixes the passport ordering to use `p.location` — and, because TypeORM resolves a raw `ORDER BY` expression as `alias.property` (which fails for a function call and breaks the paginated "distinct ids" query it builds for joins), the expression is now selected under an alias (`passport_distance`) and ordered by that alias;
+  - returns a **coarse distance bucket** (`"< 1 km"`, `"10-25 km"`, …) per candidate — never coordinates, never an exact distance. `haversineDistanceKm()` was added next to `distanceBucket()` for the already-filtered page.
+- **Verified against the live database:**
+  - `EXPLAIN` of the real feed query shows `Bitmap Index Scan on "IDX_profiles_location_gist"` — the radius is an indexed pre-filter;
+  - a profile moved ~20 km away is **excluded at a 1 km radius and included at a 50 km radius**, and the trigger moved its `location` with it;
+  - the passport ordering query now executes (it used to be a 500);
+  - the whole app boots (`app.init()`) and an end-to-end smoke test passes **12/12**: public paths reachable, protected paths rejected without a token, a spoofed `x-user-id` cannot bypass auth, the feed returns candidates with no raw coordinates and a distance bucket, and an admin token still passes the auth layer.
+- 13 new tests (7 in `matching.service.spec.ts`, 6 in `profile-redactor.spec.ts`).
+
+**Critical follow-up found while fixing #5 — the entity metadata was broken by fix #4**
+
+Fix #4 renamed the unique indexes in the entity decorators to `@Index('IDX_likes_user_liked', { unique: true })`. TypeORM's `@Index` overload with a **name** requires the column list as the second argument (`@Index(name, fields, options)`); without it the decorator registers an index with **no columns**, and TypeORM then throws `this.givenColumnNames is not a function` while building the metadata — **the backend crashes on boot**. The unit tests did not catch it because they mock the repositories and never build real metadata.
+
+- Fixed in `like`, `pass`, `daily-like` and `block` entities: `@Index('IDX_likes_user_liked', ['userId', 'likedUserId'], { unique: true })`.
+- Added `libs/common/src/entities/entities-metadata.spec.ts`, which builds the **real** TypeORM metadata for every entity (exactly like the app does) and asserts the four named unique indexes exist on the right columns. The test fails with the old decorator and passes with the fix — a broken decorator can no longer reach production.
 
 **Bottom line:** fix #1 before anything else — as it stands, any anonymous caller can act as any user. Then privacy redaction (#2), then the match/limit races (#4), then the geospatial + query rework (#5–6) before scaling past a few thousand users. The scoring/caching layers (#7–8) are what turn this from "correct" into "fast at 10k concurrent swipers."
